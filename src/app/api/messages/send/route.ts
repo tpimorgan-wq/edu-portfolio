@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase/admin'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 export async function POST(req: NextRequest) {
   // 1. 인증
   const token = req.cookies.get('fb-token')?.value
@@ -51,9 +49,11 @@ export async function POST(req: NextRequest) {
     if (receiverEmail) {
       try {
         const preview = content.length > 100 ? content.slice(0, 100) + '...' : content
+        const resend = new Resend(process.env.RESEND_API_KEY)
         await resend.emails.send({
           from: 'onboarding@resend.dev',
-          to: receiverEmail,
+          to: 'tpimorgan@tpiglobal.network', // 테스트 모드: Resend 가입 이메일로만 발송
+          // to: receiverEmail, // TODO: 프로덕션 전환 시 복원
           subject: `[산타크로체 에듀펌] ${senderName}님의 새 메시지`,
           html: `
             <div style="font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
