@@ -95,26 +95,12 @@ export default function MessagesPage() {
   const fetchAllowedRecipients = async (db: ReturnType<typeof createClient>, prof: Profile, userId: string) => {
     try {
       if (prof.role === 'admin' || prof.role === 'consultant') {
-        const { data: allStudents } = await db.from('students').select('parent_id, main_consultant_id, consultant_ids')
-        const recipientIds = new Set<string>()
-        if (allStudents) {
-          for (const s of allStudents) {
-            if (s.parent_id) recipientIds.add(s.parent_id)
-            if (s.main_consultant_id) recipientIds.add(s.main_consultant_id)
-            if (s.consultant_ids) {
-              for (const cid of s.consultant_ids) recipientIds.add(cid)
-            }
-          }
-        }
-        recipientIds.delete(userId)
-        if (recipientIds.size > 0) {
-          const results = await Promise.all(
-            Array.from(recipientIds).map(rid =>
-              db.from('profiles').select('*').eq('id', rid).single()
-            )
-          )
-          setAllowedRecipients(results.map(r => r.data).filter(Boolean) as Profile[])
-        }
+        const roles = ['admin', 'consultant', 'parent', 'student'] as const
+        const results = await Promise.all(
+          roles.map(role => db.from('profiles').select('*').eq('role', role))
+        )
+        const allProfiles = results.flatMap(r => (r.data || []) as Profile[])
+        setAllowedRecipients(allProfiles.filter((p: Profile) => p.id !== userId))
       } else {
         // parent or student: only consultants linked via students
         const { data: students } = await db
