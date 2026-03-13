@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   ClipboardList,
   Bell,
+  MessageSquare,
 } from 'lucide-react'
 import { UserRole, Notification } from '@/types'
 import { createClient } from '@/lib/firebase/db'
@@ -53,6 +54,12 @@ const navItems: NavItem[] = [
     roles: ['admin', 'consultant'],
   },
   {
+    label: '메시지',
+    href: '/messages',
+    icon: <MessageSquare className="w-5 h-5" />,
+    roles: ['admin', 'consultant', 'parent', 'student'],
+  },
+  {
     label: '계정 관리',
     href: '/admin/accounts',
     icon: <UserCog className="w-5 h-5" />,
@@ -71,6 +78,7 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
   const pathname = usePathname()
   const [deadlines, setDeadlines] = useState<DeadlineAssignment[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0)
 
   const visibleItems = navItems.filter((item) => item.roles.includes(role))
 
@@ -146,6 +154,27 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
 
     fetchDeadlines()
   }, [role, userId])
+
+  // Fetch unread message count + 60s polling
+  useEffect(() => {
+    const fetchUnreadMessages = async () => {
+      try {
+        const db = createClient()
+        const { data } = await db
+          .from('messages')
+          .select('id, is_read')
+          .eq('receiver_id', userId)
+        if (data) {
+          setUnreadMsgCount(data.filter((m: any) => !m.is_read).length)
+        }
+      } catch (err) {
+        console.error('Failed to fetch unread messages:', err)
+      }
+    }
+    fetchUnreadMessages()
+    const interval = setInterval(fetchUnreadMessages, 60000)
+    return () => clearInterval(interval)
+  }, [userId])
 
   // Fetch unread notifications for admin/consultant
   useEffect(() => {
@@ -240,6 +269,9 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
                 >
                   {item.icon}
                   <span className="flex-1">{item.label}</span>
+                  {item.href === '/messages' && unreadMsgCount > 0 && (
+                    <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full font-bold">{unreadMsgCount}</span>
+                  )}
                   {isActive(item.href) && <ChevronRight className="w-4 h-4 opacity-70" />}
                 </Link>
               </li>

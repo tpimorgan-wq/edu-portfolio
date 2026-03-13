@@ -160,6 +160,16 @@ export interface Notification {
   created_at: string
 }
 
+export interface Message {
+  id: string
+  sender_id: string
+  receiver_id: string
+  content: string
+  is_read: boolean
+  reply_to_id: string | null
+  created_at: string
+}
+
 export interface DashboardStats {
   totalStudents: number
   activeStudents: number
