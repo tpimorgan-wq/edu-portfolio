@@ -147,17 +147,19 @@ export default function MessagesPage() {
     if (!selectedMessage || !replyContent.trim() || !profile) return
     setSending(true)
     try {
-      const db = createClient()
-      await db.from('messages').insert({
-        sender_id: profile.id,
-        receiver_id: selectedMessage.sender_id,
-        content: replyContent.trim(),
-        is_read: false,
-        reply_to_id: selectedMessage.id,
-        created_at: new Date().toISOString(),
+      const res = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiver_id: selectedMessage.sender_id,
+          content: replyContent.trim(),
+          reply_to_id: selectedMessage.id,
+        }),
       })
+      if (!res.ok) throw new Error('Failed to send reply')
       setReplyContent('')
       // Refresh messages
+      const db = createClient()
       const { data: inbox } = await db
         .from('messages')
         .select('*')
@@ -181,18 +183,20 @@ export default function MessagesPage() {
     if (!composeForm.receiver_id || !composeForm.content.trim() || !profile) return
     setSending(true)
     try {
-      const db = createClient()
-      await db.from('messages').insert({
-        sender_id: profile.id,
-        receiver_id: composeForm.receiver_id,
-        content: composeForm.content.trim(),
-        is_read: false,
-        reply_to_id: null,
-        created_at: new Date().toISOString(),
+      const res = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiver_id: composeForm.receiver_id,
+          content: composeForm.content.trim(),
+          reply_to_id: null,
+        }),
       })
+      if (!res.ok) throw new Error('Failed to send message')
       setComposeForm({ receiver_id: '', content: '' })
       setShowCompose(false)
       // Refresh sent
+      const db = createClient()
       const { data: sent } = await db
         .from('messages')
         .select('*')
