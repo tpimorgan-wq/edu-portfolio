@@ -71,13 +71,12 @@ export default function MessagesPage() {
         const map: Record<string, Profile> = {}
         map[session.userId] = prof
         if (userIds.size > 0) {
-          const { data: profiles } = await db
-            .from('profiles')
-            .select('*')
-          if (profiles) {
-            for (const p of profiles) {
-              if (userIds.has(p.id)) map[p.id] = p
-            }
+          const profilePromises = Array.from(userIds).map(uid =>
+            db.from('profiles').select('*').eq('id', uid).single()
+          )
+          const results = await Promise.all(profilePromises)
+          for (const { data: p } of results) {
+            if (p) map[p.id] = p
           }
         }
         setProfileMap(map)
@@ -96,8 +95,26 @@ export default function MessagesPage() {
   const fetchAllowedRecipients = async (db: ReturnType<typeof createClient>, prof: Profile, userId: string) => {
     try {
       if (prof.role === 'admin' || prof.role === 'consultant') {
-        const { data } = await db.from('profiles').select('*')
-        setAllowedRecipients((data || []).filter((p: Profile) => p.id !== userId))
+        const { data: allStudents } = await db.from('students').select('parent_id, main_consultant_id, consultant_ids')
+        const recipientIds = new Set<string>()
+        if (allStudents) {
+          for (const s of allStudents) {
+            if (s.parent_id) recipientIds.add(s.parent_id)
+            if (s.main_consultant_id) recipientIds.add(s.main_consultant_id)
+            if (s.consultant_ids) {
+              for (const cid of s.consultant_ids) recipientIds.add(cid)
+            }
+          }
+        }
+        recipientIds.delete(userId)
+        if (recipientIds.size > 0) {
+          const results = await Promise.all(
+            Array.from(recipientIds).map(rid =>
+              db.from('profiles').select('*').eq('id', rid).single()
+            )
+          )
+          setAllowedRecipients(results.map(r => r.data).filter(Boolean) as Profile[])
+        }
       } else {
         // parent or student: only consultants linked via students
         const { data: students } = await db
@@ -116,14 +133,39 @@ export default function MessagesPage() {
         }
 
         if (consultantIds.size > 0) {
-          const { data: profiles } = await db.from('profiles').select('*')
-          setAllowedRecipients(
-            (profiles || []).filter((p: Profile) => consultantIds.has(p.id))
+          const results = await Promise.all(
+            Array.from(consultantIds).map(cid =>
+              db.from('profiles').select('*').eq('id', cid).single()
+            )
           )
+          setAllowedRecipients(results.map(r => r.data).filter(Boolean) as Profile[])
         }
       }
     } catch (err) {
       console.error('Failed to fetch allowed recipients:', err)
+    }
+  }
+
+  const refreshProfileMap = async (inboxMsgs: Message[], sentMsgs: Message[]) => {
+    const db = createClient()
+    const allMsgs = [...inboxMsgs, ...sentMsgs]
+    const missingIds = new Set<string>()
+    for (const m of allMsgs) {
+      if (!profileMap[m.sender_id]) missingIds.add(m.sender_id)
+      if (!profileMap[m.receiver_id]) missingIds.add(m.receiver_id)
+    }
+    if (missingIds.size === 0) return
+    const results = await Promise.all(
+      Array.from(missingIds).map(uid =>
+        db.from('profiles').select('*').eq('id', uid).single()
+      )
+    )
+    const newEntries: Record<string, Profile> = {}
+    for (const { data: p } of results) {
+      if (p) newEntries[p.id] = p
+    }
+    if (Object.keys(newEntries).length > 0) {
+      setProfileMap(prev => ({ ...prev, ...newEntries }))
     }
   }
 
@@ -172,6 +214,7 @@ export default function MessagesPage() {
         .eq('sender_id', profile.id)
         .order('created_at', { ascending: false })
       setSentMessages(sent || [])
+      await refreshProfileMap(inbox || [], sent || [])
     } catch (err) {
       console.error('Failed to send reply:', err)
     } finally {
@@ -203,6 +246,7 @@ export default function MessagesPage() {
         .eq('sender_id', profile.id)
         .order('created_at', { ascending: false })
       setSentMessages(sent || [])
+      await refreshProfileMap(messages, sent || [])
     } catch (err) {
       console.error('Failed to send message:', err)
     } finally {
@@ -224,7 +268,7 @@ export default function MessagesPage() {
 
   const getDisplayName = (msg: Message) => {
     const targetId = tab === 'inbox' ? msg.sender_id : msg.receiver_id
-    return profileMap[targetId]?.full_name || '알 수 없음'
+    return profileMap[targetId]?.full_name || profileMap[targetId]?.email || '알 수 없음'
   }
 
   const getRoleBadge = (role: string) => {
@@ -341,8 +385,8 @@ export default function MessagesPage() {
                   <div className="text-sm font-bold text-white">
                     {tab === 'inbox' ? '보낸 사람' : '받는 사람'}:{' '}
                     {tab === 'inbox'
-                      ? (profileMap[selectedMessage.sender_id]?.full_name || '알 수 없음')
-                      : (profileMap[selectedMessage.receiver_id]?.full_name || '알 수 없음')}
+                      ? (profileMap[selectedMessage.sender_id]?.full_name || profileMap[selectedMessage.sender_id]?.email || '알 수 없음')
+                      : (profileMap[selectedMessage.receiver_id]?.full_name || profileMap[selectedMessage.receiver_id]?.email || '알 수 없음')}
                   </div>
                   <div className="text-[11px] text-gray-400">
                     {new Date(selectedMessage.created_at).toLocaleString('ko-KR')}
