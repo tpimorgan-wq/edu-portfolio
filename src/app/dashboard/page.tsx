@@ -13,6 +13,7 @@ import {
   UserCheck,
   Clock,
   ChevronRight,
+  ChevronDown,
   GraduationCap,
 } from 'lucide-react'
 
@@ -24,12 +25,33 @@ interface Stats {
   totalParents: number
 }
 
+interface ConsultantOverview {
+  id: string; name: string; email: string
+  studentCount: number; weekClassCount: number
+  students: { id: string; name: string; school: string | null; grade: string | null }[]
+}
+
+function getThisWeekRange(): { weekStart: string; weekEnd: string } {
+  const now = new Date()
+  const day = now.getDay()
+  const diffToMonday = day === 0 ? -6 : 1 - day
+  const monday = new Date(now)
+  monday.setDate(now.getDate() + diffToMonday)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const fmt = (d: Date) => d.toISOString().split('T')[0]
+  return { weekStart: fmt(monday), weekEnd: fmt(sunday) }
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
   const [recentStudents, setRecentStudents] = useState<Student[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<(Schedule & { student_name?: string })[]>([])
+  const [weeklyClasses, setWeeklyClasses] = useState<(Schedule & { student_name?: string })[]>([])
+  const [consultantOverviews, setConsultantOverviews] = useState<ConsultantOverview[]>([])
+  const [expandedConsultant, setExpandedConsultant] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -115,6 +137,57 @@ export default function DashboardPage() {
           totalConsultants: consultantCount,
           totalParents: parentCount,
         })
+
+        // Consultant: fetch this week's classes for their students
+        if (prof.role === 'consultant') {
+          const { weekStart, weekEnd } = getThisWeekRange()
+          const classes: (Schedule & { student_name?: string })[] = []
+          const studentNameMap: Record<string, string> = {}
+          for (const s of students) studentNameMap[(s as any).id] = (s as any).name
+          for (const s of students) {
+            const { data: scheds } = await db.from('schedules').select('*')
+              .eq('student_id', (s as any).id).gte('event_date', weekStart)
+              .order('event_date', { ascending: true })
+            if (scheds) {
+              for (const sc of scheds) {
+                if (sc.event_date <= weekEnd && sc.status !== 'cancelled') {
+                  classes.push({ ...sc, student_name: studentNameMap[(s as any).id] || '' })
+                }
+              }
+            }
+          }
+          classes.sort((a, b) => a.event_date.localeCompare(b.event_date) || (a.event_time || '').localeCompare(b.event_time || ''))
+          setWeeklyClasses(classes)
+        }
+
+        // Admin: fetch consultant overviews
+        if (prof.role === 'admin') {
+          const { weekStart, weekEnd } = getThisWeekRange()
+          const { data: consultants } = await db.from('profiles').select('*').eq('role', 'consultant')
+          const overviews: ConsultantOverview[] = []
+          for (const c of (consultants || [])) {
+            const cStudents = (allStudents || []).filter((s: any) =>
+              s.main_consultant_id === c.id || (s.consultant_ids && s.consultant_ids.includes(c.id))
+            )
+            let weekClassCount = 0
+            for (const s of cStudents) {
+              const { data: scheds } = await db.from('schedules').select('*')
+                .eq('student_id', (s as any).id).gte('event_date', weekStart)
+              if (scheds) {
+                weekClassCount += scheds.filter((sc: any) => sc.event_date <= weekEnd && sc.status !== 'cancelled').length
+              }
+            }
+            overviews.push({
+              id: c.id,
+              name: c.full_name || c.email?.split('@')[0] || '',
+              email: c.email || '',
+              studentCount: cStudents.length,
+              weekClassCount,
+              students: cStudents.map((s: any) => ({ id: s.id, name: s.name, school: s.school, grade: s.grade })),
+            })
+          }
+          setConsultantOverviews(overviews)
+        }
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err)
       } finally {
@@ -272,6 +345,93 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Consultant: This week's classes */}
+      {profile?.role === 'consultant' && (
+        <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-700">
+            <Calendar className="w-5 h-5 text-cyan-400" />
+            <h2 className="font-semibold text-white">이번 주 수업</h2>
+          </div>
+          <div className="divide-y divide-gray-700">
+            {weeklyClasses.length === 0 ? (
+              <div className="px-5 py-8 text-center text-gray-500">이번 주 예정된 수업이 없습니다</div>
+            ) : (
+              weeklyClasses.map((cls) => (
+                <div key={cls.id} className="px-5 py-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-white truncate">{cls.title}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {cls.student_name} · {cls.event_date}
+                        {cls.event_time && ` ${cls.event_time.slice(0, 5)}`}
+                      </div>
+                    </div>
+                    {cls.type && (
+                      <span className="text-xs px-2 py-1 bg-gray-700 text-gray-300 rounded-full flex-shrink-0">
+                        {cls.type}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Admin: Consultant overview */}
+      {profile?.role === 'admin' && consultantOverviews.length > 0 && (
+        <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-700">
+            <Users className="w-5 h-5 text-purple-400" />
+            <h2 className="font-semibold text-white">컨설턴트별 현황</h2>
+          </div>
+          <div className="divide-y divide-gray-700">
+            {consultantOverviews.map((c) => (
+              <div key={c.id}>
+                <button
+                  onClick={() => setExpandedConsultant(expandedConsultant === c.id ? null : c.id)}
+                  className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-700/50 transition text-left"
+                >
+                  <div className="w-9 h-9 rounded-full bg-purple-900/40 flex items-center justify-center text-sm font-medium text-purple-300 flex-shrink-0">
+                    {c.name[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-white">{c.name}</div>
+                    <div className="text-xs text-gray-400">{c.email}</div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-xs text-gray-400">학생 {c.studentCount}명</span>
+                    <span className="text-xs text-cyan-400">수업 {c.weekClassCount}건</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${expandedConsultant === c.id ? 'rotate-180' : ''}`} />
+                  </div>
+                </button>
+                {expandedConsultant === c.id && (
+                  <div className="px-5 pb-3">
+                    {c.students.length === 0 ? (
+                      <div className="text-xs text-gray-500 py-2 pl-12">담당 학생이 없습니다</div>
+                    ) : (
+                      <div className="space-y-1 pl-12">
+                        {c.students.map((s) => (
+                          <Link
+                            key={s.id}
+                            href={`/students/${s.id}`}
+                            className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-700/50 transition"
+                          >
+                            <span className="text-xs font-medium text-white">{s.name}</span>
+                            <span className="text-[10px] text-gray-500">{s.school || '학교 미정'} · {s.grade || '-'}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

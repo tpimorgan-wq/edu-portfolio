@@ -13,8 +13,9 @@ import {
   ClipboardList,
   Bell,
   MessageSquare,
+  Calendar,
 } from 'lucide-react'
-import { UserRole, Notification } from '@/types'
+import { UserRole, Notification, Schedule } from '@/types'
 import { createClient } from '@/lib/firebase/db'
 
 interface SidebarProps {
@@ -67,6 +68,18 @@ const navItems: NavItem[] = [
   },
 ]
 
+function getThisWeekRange(): { weekStart: string; weekEnd: string } {
+  const now = new Date()
+  const day = now.getDay() // 0=Sun
+  const diffToMonday = day === 0 ? -6 : 1 - day
+  const monday = new Date(now)
+  monday.setDate(now.getDate() + diffToMonday)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const fmt = (d: Date) => d.toISOString().split('T')[0]
+  return { weekStart: fmt(monday), weekEnd: fmt(sunday) }
+}
+
 function getDaysLeft(dueDate: string): number {
   const now = new Date()
   now.setHours(0, 0, 0, 0)
@@ -77,6 +90,7 @@ function getDaysLeft(dueDate: string): number {
 export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const [deadlines, setDeadlines] = useState<DeadlineAssignment[]>([])
+  const [weekSchedules, setWeekSchedules] = useState<(Schedule & { student_name?: string })[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadMsgCount, setUnreadMsgCount] = useState(0)
 
@@ -147,6 +161,26 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
         // Sort by due_date and take top 5
         allAssignments.sort((a, b) => a.due_date.localeCompare(b.due_date))
         setDeadlines(allAssignments.slice(0, 5))
+
+        // Fetch this week's schedules for student/parent
+        if (role === 'student' || role === 'parent') {
+          const { weekStart, weekEnd } = getThisWeekRange()
+          const allSchedules: (Schedule & { student_name?: string })[] = []
+          for (const sid of studentIds) {
+            const { data } = await db.from('schedules').select('*')
+              .eq('student_id', sid).gte('event_date', weekStart)
+              .order('event_date', { ascending: true })
+            if (data) {
+              for (const s of data) {
+                if (s.event_date <= weekEnd && s.status !== 'cancelled') {
+                  allSchedules.push({ ...s, student_name: studentMap![sid] || '' })
+                }
+              }
+            }
+          }
+          allSchedules.sort((a, b) => a.event_date.localeCompare(b.event_date) || (a.event_time || '').localeCompare(b.event_time || ''))
+          setWeekSchedules(allSchedules)
+        }
       } catch (err) {
         console.error('Failed to fetch deadline assignments:', err)
       }
@@ -278,6 +312,46 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
             ))}
           </ul>
         </nav>
+
+        {/* Weekly Schedule (student/parent) */}
+        {weekSchedules.length > 0 && (
+          <div className="px-4 py-3 border-t border-gray-700">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-semibold text-gray-300">이번 주 일정</span>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(
+                weekSchedules.reduce<Record<string, (Schedule & { student_name?: string })[]>>((groups, s) => {
+                  const d = new Date(s.event_date + 'T00:00:00')
+                  const dayNames = ['일', '월', '화', '수', '목', '금', '토']
+                  const key = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} (${dayNames[d.getDay()]})`
+                  if (!groups[key]) groups[key] = []
+                  groups[key].push(s)
+                  return groups
+                }, {})
+              ).map(([day, items]) => (
+                <div key={day}>
+                  <div className="text-[10px] font-medium text-gray-500 mb-1">{day}</div>
+                  <div className="space-y-1">
+                    {items.map(s => (
+                      <div key={s.id} className="px-2 py-1.5 bg-cyan-900/10 border border-cyan-900/30 rounded-lg">
+                        <div className="text-[11px] text-white font-medium truncate">{s.title}</div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {s.event_time && <span className="text-[10px] text-gray-400">{s.event_time.slice(0, 5)}</span>}
+                          {s.student_name && <span className="text-[10px] text-gray-500">· {s.student_name}</span>}
+                        </div>
+                        {s.zoom_link && (
+                          <a href={s.zoom_link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline mt-0.5 inline-block">Zoom 참여</a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Student Update Notifications (admin/consultant only) */}
         {notifications.length > 0 && (

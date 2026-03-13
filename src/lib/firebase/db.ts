@@ -142,6 +142,11 @@ class QueryBuilder implements PromiseLike<QueryResult> {
     return this
   }
 
+  lte(field: string, value: any): this {
+    this._wheres.push([field, '<=', value])
+    return this
+  }
+
   order(field: string, opts?: { ascending?: boolean }): this {
     this._orderBys.push([field, opts?.ascending === false ? 'desc' : 'asc'])
     return this
