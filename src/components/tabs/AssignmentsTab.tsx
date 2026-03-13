@@ -55,8 +55,8 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
 
   const fetchAssignments = async () => {
     try {
-      const supabase = createClient()
-      const { data } = await supabase
+      const db = createClient()
+      const { data } = await db
         .from('assignments')
         .select('*')
         .eq('student_id', studentId)
@@ -78,9 +78,9 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
     }
     setSaving(true)
     setError(null)
-    const supabase = createClient()
+    const db = createClient()
     const now = new Date().toISOString()
-    const { error: err } = await supabase.from('assignments').insert({
+    const { error: err } = await db.from('assignments').insert({
       student_id: studentId,
       title: form.title,
       category: form.category,
@@ -112,8 +112,8 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
 
   const handleUpdate = async (id: string) => {
     if (!editForm.title || !editForm.due_date || !editForm.category) return
-    const supabase = createClient()
-    await supabase.from('assignments').update({
+    const db = createClient()
+    await db.from('assignments').update({
       title: editForm.title,
       category: editForm.category,
       status: editForm.status,
@@ -127,15 +127,15 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
   }
 
   const handleStatusChange = async (id: string, status: Assignment['status']) => {
-    const supabase = createClient()
-    await supabase.from('assignments').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
+    const db = createClient()
+    await db.from('assignments').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
     setAssignments(prev => prev.map(a => a.id === id ? { ...a, status } : a))
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 과제를 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('assignments').delete().eq('id', id)
+    const db = createClient()
+    await db.from('assignments').delete().eq('id', id)
     setAssignments(prev => prev.filter(a => a.id !== id))
   }
 

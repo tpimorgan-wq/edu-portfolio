@@ -34,8 +34,8 @@ export default function EssaysTab({ studentId, userRole, userId, userName }: Ess
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const fetchEssays = async () => {
-    const supabase = createClient()
-    const { data } = await supabase
+    const db = createClient()
+    const { data } = await db
       .from('essays')
       .select('*')
       .eq('student_id', studentId)
@@ -55,8 +55,8 @@ export default function EssaysTab({ studentId, userRole, userId, userName }: Ess
     }
     setSaving(true)
     setError(null)
-    const supabase = createClient()
-    const { error: err } = await supabase.from('essays').insert({
+    const db = createClient()
+    const { error: err } = await db.from('essays').insert({
       student_id: studentId,
       title: form.title,
       prompt: form.prompt || null,
@@ -76,8 +76,8 @@ export default function EssaysTab({ studentId, userRole, userId, userName }: Ess
   const handleUpdate = async (essay: Essay) => {
     setSaving(true)
     setError(null)
-    const supabase = createClient()
-    const { error: err } = await supabase
+    const db = createClient()
+    const { error: err } = await db
       .from('essays')
       .update({
         title: form.title,
@@ -98,8 +98,8 @@ export default function EssaysTab({ studentId, userRole, userId, userName }: Ess
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 에세이를 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('essays').delete().eq('id', id)
+    const db = createClient()
+    await db.from('essays').delete().eq('id', id)
     setEssays(prev => prev.filter(e => e.id !== id))
   }
 

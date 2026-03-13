@@ -34,8 +34,8 @@ export default function PortfolioTab({ studentId, userRole, userId, userName }: 
   const [error, setError] = useState<string | null>(null)
 
   const fetchItems = async () => {
-    const supabase = createClient()
-    const { data } = await supabase
+    const db = createClient()
+    const { data } = await db
       .from('portfolio')
       .select('*')
       .eq('student_id', studentId)
@@ -53,8 +53,8 @@ export default function PortfolioTab({ studentId, userRole, userId, userName }: 
     }
     setSaving(true)
     setError(null)
-    const supabase = createClient()
-    const { error: err } = await supabase.from('portfolio').insert({
+    const db = createClient()
+    const { error: err } = await db.from('portfolio').insert({
       student_id: studentId,
       title: form.title,
       category: form.category || null,
@@ -72,8 +72,8 @@ export default function PortfolioTab({ studentId, userRole, userId, userName }: 
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 포트폴리오 항목을 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('portfolio').delete().eq('id', id)
+    const db = createClient()
+    await db.from('portfolio').delete().eq('id', id)
     setItems(prev => prev.filter(i => i.id !== id))
   }
 

@@ -20,12 +20,12 @@ export async function recordTabUpdate(
   userName: string,
   userRole: UserRole,
 ) {
-  const supabase = createClient()
+  const db = createClient()
   const now = new Date().toISOString()
 
   // Upsert tab update record (one per student+tab)
   // First try to find existing
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from('tab_updates')
     .select('*')
     .eq('student_id', studentId)
@@ -33,14 +33,14 @@ export async function recordTabUpdate(
     .single()
 
   if (existing) {
-    await supabase.from('tab_updates').update({
+    await db.from('tab_updates').update({
       updated_by: userId,
       updater_name: userName,
       updater_role: userRole,
       updated_at: now,
     }).eq('id', existing.id)
   } else {
-    await supabase.from('tab_updates').insert({
+    await db.from('tab_updates').insert({
       student_id: studentId,
       tab_name: tabName,
       updated_by: userId,
@@ -50,17 +50,17 @@ export async function recordTabUpdate(
     })
   }
 
-  // If updater is a student, notify the consultant
+  // If updater is a student, notify the main consultant
   if (userRole === 'student') {
-    const { data: student } = await supabase
+    const { data: student } = await db
       .from('students')
-      .select('consultant_id, name')
+      .select('main_consultant_id, name')
       .eq('id', studentId)
       .single()
 
-    if (student?.consultant_id) {
-      await supabase.from('notifications').insert({
-        recipient_id: student.consultant_id,
+    if (student?.main_consultant_id) {
+      await db.from('notifications').insert({
+        recipient_id: student.main_consultant_id,
         student_id: studentId,
         student_name: student.name,
         tab_name: TAB_LABELS[tabName] || tabName,
@@ -75,8 +75,8 @@ export async function getTabUpdate(
   studentId: string,
   tabName: string,
 ): Promise<TabUpdate | null> {
-  const supabase = createClient()
-  const { data } = await supabase
+  const db = createClient()
+  const { data } = await db
     .from('tab_updates')
     .select('*')
     .eq('student_id', studentId)

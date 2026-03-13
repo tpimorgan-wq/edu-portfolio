@@ -34,8 +34,8 @@ export default function ExamsTab({ studentId, userRole, userId, userName }: Exam
   const [error, setError] = useState<string | null>(null)
 
   const fetchExams = async () => {
-    const supabase = createClient()
-    const { data } = await supabase
+    const db = createClient()
+    const { data } = await db
       .from('exams')
       .select('*')
       .eq('student_id', studentId)
@@ -68,8 +68,8 @@ export default function ExamsTab({ studentId, userRole, userId, userName }: Exam
       }
     }
 
-    const supabase = createClient()
-    const { error: err } = await supabase.from('exams').insert({
+    const db = createClient()
+    const { error: err } = await db.from('exams').insert({
       student_id: studentId,
       exam_type: form.exam_type,
       exam_date: form.exam_date || null,
@@ -87,8 +87,8 @@ export default function ExamsTab({ studentId, userRole, userId, userName }: Exam
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 시험 기록을 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('exams').delete().eq('id', id)
+    const db = createClient()
+    await db.from('exams').delete().eq('id', id)
     setExams(prev => prev.filter(e => e.id !== id))
   }
 

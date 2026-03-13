@@ -82,12 +82,12 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
   useEffect(() => {
     const fetchDeadlines = async () => {
       try {
-        const supabase = createClient()
+        const db = createClient()
 
         // Fetch students visible to this user
         let studentIds: string[] = []
         if (role === 'admin') {
-          const { data: students } = await supabase.from('students').select('id, name')
+          const { data: students } = await db.from('students').select('id, name')
           if (students) {
             studentIds = students.map((s: any) => s.id)
             // Store name map for later
@@ -95,15 +95,19 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
             for (const s of students) studentMap[s.id] = (s as any).name
           }
         } else if (role === 'consultant') {
-          const { data: students } = await supabase.from('students').select('id, name').eq('consultant_id', userId)
-          if (students) {
+          // Fetch students where this consultant is main or in consultant_ids
+          const { data: allStudents } = await db.from('students').select('id, name, main_consultant_id, consultant_ids')
+          const students = (allStudents || []).filter((s: any) =>
+            s.main_consultant_id === userId || (s.consultant_ids && s.consultant_ids.includes(userId))
+          )
+          if (students.length > 0) {
             studentIds = students.map((s: any) => s.id)
             var studentMap: Record<string, string> = {}
             for (const s of students) studentMap[s.id] = (s as any).name
           }
         } else {
           // parent
-          const { data: students } = await supabase.from('students').select('id, name').eq('parent_id', userId)
+          const { data: students } = await db.from('students').select('id, name').eq('parent_id', userId)
           if (students) {
             studentIds = students.map((s: any) => s.id)
             var studentMap: Record<string, string> = {}
@@ -116,7 +120,7 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
         // Fetch incomplete assignments for all visible students
         const allAssignments: DeadlineAssignment[] = []
         for (const sid of studentIds) {
-          const { data } = await supabase
+          const { data } = await db
             .from('assignments')
             .select('*')
             .eq('student_id', sid)
@@ -148,8 +152,8 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
     if (role !== 'admin' && role !== 'consultant') return
     const fetchNotifications = async () => {
       try {
-        const supabase = createClient()
-        const { data } = await supabase
+        const db = createClient()
+        const { data } = await db
           .from('notifications')
           .select('*')
           .eq('recipient_id', userId)
@@ -164,8 +168,8 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
   }, [role, userId])
 
   const markAsRead = async (id: string) => {
-    const supabase = createClient()
-    await supabase.from('notifications').update({ read: true }).eq('id', id)
+    const db = createClient()
+    await db.from('notifications').update({ read: true }).eq('id', id)
     setNotifications(prev => prev.filter(n => n.id !== id))
   }
 

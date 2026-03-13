@@ -39,8 +39,8 @@ export default function EcActivitiesTab({ studentId, userRole, userId, userName 
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const fetchActivities = async () => {
-    const supabase = createClient()
-    const { data } = await supabase
+    const db = createClient()
+    const { data } = await db
       .from('ec_activities')
       .select('*')
       .eq('student_id', studentId)
@@ -58,8 +58,8 @@ export default function EcActivitiesTab({ studentId, userRole, userId, userName 
     }
     setSaving(true)
     setError(null)
-    const supabase = createClient()
-    const { error: err } = await supabase.from('ec_activities').insert({
+    const db = createClient()
+    const { error: err } = await db.from('ec_activities').insert({
       student_id: studentId,
       activity_name: form.activity_name,
       category: form.category || null,
@@ -81,8 +81,8 @@ export default function EcActivitiesTab({ studentId, userRole, userId, userName 
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 활동을 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('ec_activities').delete().eq('id', id)
+    const db = createClient()
+    await db.from('ec_activities').delete().eq('id', id)
     setActivities(prev => prev.filter(a => a.id !== id))
   }
 

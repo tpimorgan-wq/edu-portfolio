@@ -88,8 +88,8 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
 
   const fetchSchedules = async () => {
     try {
-      const supabase = createClient()
-      const { data } = await supabase
+      const db = createClient()
+      const { data } = await db
         .from('schedules')
         .select('*')
         .eq('student_id', studentId)
@@ -111,8 +111,8 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     }
     setSaving(true)
     setError(null)
-    const supabase = createClient()
-    const { error: err } = await supabase.from('schedules').insert({
+    const db = createClient()
+    const { error: err } = await db.from('schedules').insert({
       student_id: studentId,
       title: form.title,
       description: form.description || null,
@@ -130,16 +130,16 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
   }
 
   const handleStatusChange = async (id: string, status: Schedule['status']) => {
-    const supabase = createClient()
-    await supabase.from('schedules').update({ status }).eq('id', id)
+    const db = createClient()
+    await db.from('schedules').update({ status }).eq('id', id)
     setSchedules(prev => prev.map(s => s.id === id ? { ...s, status } : s))
     if (selectedEvent?.id === id) setSelectedEvent({ ...selectedEvent, status })
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 일정을 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('schedules').delete().eq('id', id)
+    const db = createClient()
+    await db.from('schedules').delete().eq('id', id)
     setSchedules(prev => prev.filter(s => s.id !== id))
     if (selectedEvent?.id === id) setSelectedEvent(null)
   }

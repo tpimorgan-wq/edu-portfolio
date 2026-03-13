@@ -56,8 +56,8 @@ export default function DocumentsTab({ studentId, userRole, userId, userName }: 
 
   const fetchDocuments = async () => {
     try {
-      const supabase = createClient()
-      const { data } = await supabase
+      const db = createClient()
+      const { data } = await db
         .from('documents')
         .select('*')
         .eq('student_id', studentId)
@@ -80,8 +80,8 @@ export default function DocumentsTab({ studentId, userRole, userId, userName }: 
     setSaving(true)
     setError(null)
 
-    const supabase = createClient()
-    const { error: err } = await supabase.from('documents').insert({
+    const db = createClient()
+    const { error: err } = await db.from('documents').insert({
       student_id: studentId,
       name: form.name,
       type: form.type || null,
@@ -98,8 +98,8 @@ export default function DocumentsTab({ studentId, userRole, userId, userName }: 
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 서류를 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('documents').delete().eq('id', id)
+    const db = createClient()
+    await db.from('documents').delete().eq('id', id)
     setDocuments(prev => prev.filter(d => d.id !== id))
   }
 

@@ -16,6 +16,7 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [consultantNames, setConsultantNames] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const fetchData = async () => {
@@ -23,8 +24,8 @@ export default function StudentsPage() {
         const session = getSessionFromCookies()
         if (!session) { router.push('/login'); return }
 
-        const supabase = createClient()
-        const { data: prof } = await supabase
+        const db = createClient()
+        const { data: prof } = await db
           .from('profiles')
           .select('*')
           .eq('id', session.userId)
@@ -32,7 +33,7 @@ export default function StudentsPage() {
         if (!prof) { router.push('/login'); return }
 
         if (prof.role === 'parent') {
-          const { data: student } = await supabase
+          const { data: student } = await db
             .from('students')
             .select('id')
             .eq('parent_id', session.userId)
@@ -43,18 +44,29 @@ export default function StudentsPage() {
 
         setProfile(prof)
 
-        let query = supabase
+        let query = db
           .from('students')
-          .select('*, consultant:consultant_id(full_name, email), parent:parent_id(full_name, email)')
+          .select('*')
           .order('created_at', { ascending: false })
 
+        const { data } = await query
+        let studentList = (data || []) as Student[]
+
+        // Consultant: filter to students where they are main or in consultant_ids
         if (prof.role === 'consultant') {
-          query = query.eq('consultant_id', session.userId)
+          studentList = studentList.filter(s =>
+            s.main_consultant_id === session.userId || (s.consultant_ids && s.consultant_ids.includes(session.userId))
+          )
         }
 
-        const { data } = await query
-        setStudents((data || []) as Student[])
-        setFiltered((data || []) as Student[])
+        setStudents(studentList)
+        setFiltered(studentList)
+
+        // Build consultant name map for display
+        const { data: allConsultants } = await db.from('profiles').select('id, full_name, email').eq('role', 'consultant')
+        const nameMap: Record<string, string> = {}
+        for (const c of (allConsultants || [])) nameMap[c.id] = (c as any).full_name || (c as any).email
+        setConsultantNames(nameMap)
       } catch (err) {
         console.error('Failed to fetch students:', err)
       } finally {
@@ -172,7 +184,10 @@ export default function StudentsPage() {
                     {student.name[0]}
                   </div>
                   <div>
-                    <div className="font-semibold text-white group-hover:text-blue-400 transition">{student.name}</div>
+                    <div className="font-semibold text-white group-hover:text-blue-400 transition">
+                      {student.name}
+                      {student.nationality && <span className="text-xs text-gray-500 ml-1">({student.nationality})</span>}
+                    </div>
                     <div className="text-xs text-gray-400">{student.school || '학교 미정'}</div>
                   </div>
                 </div>
@@ -194,10 +209,10 @@ export default function StudentsPage() {
                     </span>
                   </div>
                 )}
-                {(student.consultant as any)?.full_name && (
+                {student.main_consultant_id && consultantNames[student.main_consultant_id] && (
                   <div className="flex justify-between">
-                    <span>담당 컨설턴트</span>
-                    <span className="text-gray-300">{(student.consultant as any).full_name}</span>
+                    <span>메인 담당자</span>
+                    <span className="text-gray-300 truncate max-w-32 text-right">{consultantNames[student.main_consultant_id]}</span>
                   </div>
                 )}
               </div>

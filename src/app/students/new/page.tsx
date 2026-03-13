@@ -21,8 +21,8 @@ export default function NewStudentPage() {
       const session = getSessionFromCookies()
       if (!session) { router.push('/login'); return }
 
-      const supabase = createClient()
-      const { data: prof } = await supabase
+      const db = createClient()
+      const { data: prof } = await db
         .from('profiles')
         .select('role')
         .eq('id', session.userId)
@@ -36,8 +36,8 @@ export default function NewStudentPage() {
       setAuthorized(true)
 
       const [{ data: cons }, { data: pars }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('role', 'consultant').order('full_name'),
-        supabase.from('profiles').select('*').eq('role', 'parent').order('full_name'),
+        db.from('profiles').select('*').eq('role', 'consultant').order('full_name'),
+        db.from('profiles').select('*').eq('role', 'parent').order('full_name'),
       ])
 
       setConsultants(cons || [])

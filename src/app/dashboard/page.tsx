@@ -38,8 +38,8 @@ export default function DashboardPage() {
         const session = getSessionFromCookies()
         if (!session) { router.push('/login'); return }
 
-        const supabase = createClient()
-        const { data: prof } = await supabase
+        const db = createClient()
+        const { data: prof } = await db
           .from('profiles')
           .select('*')
           .eq('id', session.userId)
@@ -49,7 +49,7 @@ export default function DashboardPage() {
         setProfile(prof)
 
         if (prof.role === 'parent') {
-          const { data: student } = await supabase
+          const { data: student } = await db
             .from('students')
             .select('id')
             .eq('parent_id', session.userId)
@@ -58,22 +58,28 @@ export default function DashboardPage() {
           return
         }
 
-        let studentsQuery = supabase
+        let studentsQuery = db
           .from('students')
           .select('id, name, school, grade, status, created_at', { count: 'exact' })
+        // Consultant filtering is done client-side after fetch
+
+        const { data: allStudents } = await studentsQuery
+          .order('created_at', { ascending: false })
+
+        // Consultant: filter to their students
+        let students = allStudents || []
         if (prof.role === 'consultant') {
-          studentsQuery = studentsQuery.eq('consultant_id', session.userId)
+          students = students.filter((s: any) =>
+            s.main_consultant_id === session.userId || (s.consultant_ids && s.consultant_ids.includes(session.userId))
+          )
         }
 
-        const { data: students, count: studentCount } = await studentsQuery
-          .order('created_at', { ascending: false })
-          .limit(5)
-
-        const activeCount = students?.filter((s: any) => s.status === 'active').length || 0
-        setRecentStudents((students || []) as Student[])
+        const studentCount = students.length
+        const activeCount = students.filter((s: any) => s.status === 'active').length
+        setRecentStudents(students.slice(0, 5) as Student[])
 
         const today = new Date().toISOString().split('T')[0]
-        const { data: schedules } = await supabase
+        const { data: schedules } = await db
           .from('schedules')
           .select('*, students(name)')
           .gte('event_date', today)
@@ -90,11 +96,11 @@ export default function DashboardPage() {
         let consultantCount = 0
         let parentCount = 0
         if (prof.role === 'admin') {
-          const { count: cc } = await supabase
+          const { count: cc } = await db
             .from('profiles')
             .select('id', { count: 'exact' })
             .eq('role', 'consultant')
-          const { count: pc } = await supabase
+          const { count: pc } = await db
             .from('profiles')
             .select('id', { count: 'exact' })
             .eq('role', 'parent')

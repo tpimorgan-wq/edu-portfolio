@@ -33,8 +33,8 @@ export default function GpaTab({ studentId, userRole, userId, userName }: GpaTab
   const [error, setError] = useState<string | null>(null)
 
   const fetchRecords = async () => {
-    const supabase = createClient()
-    const { data } = await supabase
+    const db = createClient()
+    const { data } = await db
       .from('gpa_records')
       .select('*')
       .eq('student_id', studentId)
@@ -53,8 +53,8 @@ export default function GpaTab({ studentId, userRole, userId, userName }: GpaTab
     }
     setSaving(true)
     setError(null)
-    const supabase = createClient()
-    const { error: err } = await supabase.from('gpa_records').insert({
+    const db = createClient()
+    const { error: err } = await db.from('gpa_records').insert({
       student_id: studentId,
       semester: form.semester,
       year: Number(form.year),
@@ -73,8 +73,8 @@ export default function GpaTab({ studentId, userRole, userId, userName }: GpaTab
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 GPA 기록을 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('gpa_records').delete().eq('id', id)
+    const db = createClient()
+    await db.from('gpa_records').delete().eq('id', id)
     setRecords(prev => prev.filter(r => r.id !== id))
   }
 

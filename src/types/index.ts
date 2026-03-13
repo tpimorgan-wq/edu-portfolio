@@ -14,18 +14,18 @@ export interface Student {
   id: string
   name: string
   birth_date: string | null
+  nationality: string | null
   school: string | null
   grade: string | null
   target_countries: string[] | null
   target_majors: string[] | null
-  consultant_id: string | null
+  main_consultant_id: string | null
+  consultant_ids: string[] | null
   parent_id: string | null
   notes: string | null
   status: 'active' | 'inactive' | 'graduated'
   created_at: string
   updated_at: string
-  consultant?: Profile
-  parent?: Profile
 }
 
 export interface Document {

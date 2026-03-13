@@ -49,8 +49,8 @@ export default function StudentDetailPage() {
         const session = getSessionFromCookies()
         if (!session) { router.push('/login'); return }
 
-        const supabase = createClient()
-        const { data: prof } = await supabase
+        const db = createClient()
+        const { data: prof } = await db
           .from('profiles')
           .select('*')
           .eq('id', session.userId)
@@ -59,7 +59,7 @@ export default function StudentDetailPage() {
 
         setCurrentUser(prof)
 
-        const { data: studentData } = await supabase
+        const { data: studentData } = await db
           .from('students')
           .select('*')
           .eq('id', studentId)
@@ -72,30 +72,41 @@ export default function StudentDetailPage() {
 
         setStudent(studentData)
 
-        if (prof.role === 'admin') {
-          // Admin: fetch all consultants/parents for editing
+        if (prof.role === 'admin' || prof.role === 'consultant') {
+          // Admin/Consultant: fetch all consultants/parents for editing
           const [{ data: cons }, { data: pars }] = await Promise.all([
-            supabase.from('profiles').select('*').eq('role', 'consultant').order('full_name'),
-            supabase.from('profiles').select('*').eq('role', 'parent').order('full_name'),
+            db.from('profiles').select('*').eq('role', 'consultant').order('full_name'),
+            db.from('profiles').select('*').eq('role', 'parent').order('full_name'),
           ])
           setConsultants(cons || [])
           setParents(pars || [])
         } else {
-          // Non-admin: fetch only the assigned consultant/parent for display
+          // Student/Parent: fetch assigned consultants + parent for display
+          const allConsultantIds: string[] = []
+          if (studentData.main_consultant_id) allConsultantIds.push(studentData.main_consultant_id)
+          if (studentData.consultant_ids) {
+            studentData.consultant_ids.forEach((id: string) => {
+              if (!allConsultantIds.includes(id)) allConsultantIds.push(id)
+            })
+          }
+
           const fetches: Promise<any>[] = []
-          if (studentData.consultant_id) {
+          for (const cid of allConsultantIds) {
             fetches.push(
-              supabase.from('profiles').select('*').eq('id', studentData.consultant_id).single()
-                .then(({ data }: any) => data ? setConsultants([data]) : null)
+              db.from('profiles').select('*').eq('id', cid).single()
+                .then(({ data }: any) => data)
             )
           }
           if (studentData.parent_id) {
             fetches.push(
-              supabase.from('profiles').select('*').eq('id', studentData.parent_id).single()
+              db.from('profiles').select('*').eq('id', studentData.parent_id).single()
                 .then(({ data }: any) => data ? setParents([data]) : null)
             )
           }
-          await Promise.all(fetches)
+          const results = await Promise.all(fetches)
+          // Filter out parent fetch results (null) and set consultants
+          const consultantProfiles = results.filter((r): r is Profile => r !== null && r !== undefined && r.role === 'consultant')
+          setConsultants(consultantProfiles)
         }
       } catch (err) {
         console.error('Failed to fetch student data:', err)
@@ -154,7 +165,10 @@ export default function StudentDetailPage() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-xl font-bold text-white">{student.name}</h1>
+              <h1 className="text-xl font-bold text-white">
+                {student.name}
+                {student.nationality && <span className="text-base font-normal text-gray-400 ml-1">({student.nationality})</span>}
+              </h1>
               <span className={`text-xs px-2.5 py-1 rounded-full ${statusColors[student.status]}`}>
                 {statusLabels[student.status]}
               </span>

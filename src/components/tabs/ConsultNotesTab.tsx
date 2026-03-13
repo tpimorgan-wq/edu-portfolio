@@ -28,8 +28,8 @@ export default function ConsultNotesTab({ studentId, currentUserId, currentUserN
 
   const fetchNotes = async () => {
     try {
-      const supabase = createClient()
-      const { data } = await supabase
+      const db = createClient()
+      const { data } = await db
         .from('consult_notes')
         .select('*')
         .eq('student_id', studentId)
@@ -51,9 +51,9 @@ export default function ConsultNotesTab({ studentId, currentUserId, currentUserN
     }
     setSaving(true)
     setError(null)
-    const supabase = createClient()
+    const db = createClient()
     const now = new Date().toISOString()
-    const { error: err } = await supabase.from('consult_notes').insert({
+    const { error: err } = await db.from('consult_notes').insert({
       student_id: studentId,
       author_id: currentUserId,
       author_name: currentUserName,
@@ -70,8 +70,8 @@ export default function ConsultNotesTab({ studentId, currentUserId, currentUserN
 
   const handleUpdate = async (id: string) => {
     if (!editContent.trim()) return
-    const supabase = createClient()
-    await supabase.from('consult_notes').update({
+    const db = createClient()
+    await db.from('consult_notes').update({
       content: editContent,
       updated_at: new Date().toISOString(),
     }).eq('id', id)
@@ -81,8 +81,8 @@ export default function ConsultNotesTab({ studentId, currentUserId, currentUserN
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 상담 노트를 삭제하시겠습니까?')) return
-    const supabase = createClient()
-    await supabase.from('consult_notes').delete().eq('id', id)
+    const db = createClient()
+    await db.from('consult_notes').delete().eq('id', id)
     setNotes(prev => prev.filter(n => n.id !== id))
   }
 

@@ -51,8 +51,8 @@ export default function AccountsPage() {
 
   const fetchProfiles = async () => {
     try {
-      const supabase = createClient()
-      const { data } = await supabase
+      const db = createClient()
+      const { data } = await db
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false })
@@ -68,8 +68,8 @@ export default function AccountsPage() {
       const session = getSessionFromCookies()
       if (!session) { router.push('/login'); return }
 
-      const supabase = createClient()
-      const { data: prof } = await supabase
+      const db = createClient()
+      const { data: prof } = await db
         .from('profiles')
         .select('role')
         .eq('id', session.userId)

@@ -27,8 +27,8 @@ export default function AuthenticatedLayout({
           return
         }
 
-        const supabase = createClient()
-        const { data: profileData } = await supabase
+        const db = createClient()
+        const { data: profileData } = await db
           .from('profiles')
           .select('*')
           .eq('id', session.userId)
