@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/firebase/db'
-import { uploadContractFile, deleteContractFile } from '@/lib/firebase/storage'
+import { uploadContractFile } from '@/lib/firebase/storage'
 import { Contract } from '@/types'
 import { FileText, Upload, Trash2, Download, X, FolderOpen } from 'lucide-react'
 
@@ -60,13 +60,12 @@ export default function ContractsTab({ studentId, userRole, userId, userName }: 
     setError(null)
 
     try {
-      const { url, path } = await uploadContractFile(studentId, selectedFile)
+      const { url } = await uploadContractFile(studentId, selectedFile)
       const db = createClient()
       const { error: dbErr } = await db.from('contracts').insert({
         student_id: studentId,
         file_url: url,
         file_name: selectedFile.name,
-        file_path: path,
         uploaded_by: userId,
         uploader_name: userName,
       })
@@ -86,12 +85,6 @@ export default function ContractsTab({ studentId, userRole, userId, userName }: 
 
   const handleDelete = async (contract: Contract) => {
     if (!confirm('이 계약서를 삭제하시겠습니까?')) return
-
-    try {
-      await deleteContractFile(contract.file_path)
-    } catch (err) {
-      console.error('Failed to delete file from storage:', err)
-    }
 
     const db = createClient()
     await db.from('contracts').delete().eq('id', contract.id)
