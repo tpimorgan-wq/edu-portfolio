@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/firebase/db'
 import { getSessionFromCookies } from '@/lib/firebase/auth'
-import { Profile, Student, Schedule } from '@/types'
+import { Profile, Student, Schedule, Assignment } from '@/types'
 import {
   Users,
   Calendar,
@@ -15,6 +15,8 @@ import {
   ChevronRight,
   ChevronDown,
   GraduationCap,
+  ClipboardList,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface Stats {
@@ -43,6 +45,28 @@ function getThisWeekRange(): { weekStart: string; weekEnd: string } {
   return { weekStart: fmt(monday), weekEnd: fmt(sunday) }
 }
 
+const DAY_LABELS: Record<string, string> = {
+  '0': '일요일',
+  '1': '월요일',
+  '2': '화요일',
+  '3': '수요일',
+  '4': '목요일',
+  '5': '금요일',
+  '6': '토요일',
+}
+
+function getDayLabel(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return DAY_LABELS[String(d.getDay())] || ''
+}
+
+function getDaysUntil(dueDateStr: string): number {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const due = new Date(dueDateStr + 'T00:00:00')
+  return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -53,6 +77,11 @@ export default function DashboardPage() {
   const [consultantOverviews, setConsultantOverviews] = useState<ConsultantOverview[]>([])
   const [expandedConsultant, setExpandedConsultant] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Student-specific state
+  const [studentId, setStudentId] = useState<string | null>(null)
+  const [studentAssignments, setStudentAssignments] = useState<Assignment[]>([])
+  const [studentSchedules, setStudentSchedules] = useState<Schedule[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -77,6 +106,61 @@ export default function DashboardPage() {
             .eq('parent_id', session.userId)
             .single()
           if (student) router.push(`/students/${student.id}`)
+          return
+        }
+
+        // Student role: fetch student-specific data and return early
+        if (prof.role === 'student') {
+          // Find student record by user_id first, fallback to name match
+          let foundStudentId: string | null = null
+
+          const { data: studentsByUserId } = await db
+            .from('students')
+            .select('id, name')
+            .eq('user_id', session.userId)
+
+          if (studentsByUserId && studentsByUserId.length > 0) {
+            foundStudentId = studentsByUserId[0].id
+          } else {
+            // Fallback: match profile full_name to student name
+            if (prof.full_name) {
+              const { data: matched } = await db
+                .from('students')
+                .select('id, name')
+                .eq('name', prof.full_name)
+              if (matched && matched.length > 0) {
+                foundStudentId = matched[0].id
+              }
+            }
+          }
+
+          setStudentId(foundStudentId)
+
+          if (foundStudentId) {
+            // Fetch incomplete assignments sorted by due_date
+            const { data: allAssignments } = await db
+              .from('assignments')
+              .select('*')
+              .eq('student_id', foundStudentId)
+              .order('due_date', { ascending: true })
+
+            setStudentAssignments((allAssignments || []).filter((a: any) => a.status !== 'done'))
+
+            // Fetch this week's schedules
+            const { weekStart, weekEnd } = getThisWeekRange()
+            const { data: allSchedules } = await db
+              .from('schedules')
+              .select('*')
+              .eq('student_id', foundStudentId)
+              .gte('event_date', weekStart)
+              .order('event_date', { ascending: true })
+
+            setStudentSchedules(
+              (allSchedules || []).filter((s: any) => s.event_date <= weekEnd && s.status !== 'cancelled')
+            )
+          }
+
+          setLoading(false)
           return
         }
 
@@ -205,6 +289,140 @@ export default function DashboardPage() {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
+      </div>
+    )
+  }
+
+  // Student dashboard view
+  if (profile?.role === 'student') {
+    // Group schedules by date
+    const schedulesByDate: Record<string, Schedule[]> = {}
+    for (const s of studentSchedules) {
+      if (!schedulesByDate[s.event_date]) schedulesByDate[s.event_date] = []
+      schedulesByDate[s.event_date].push(s)
+    }
+    const sortedDates = Object.keys(schedulesByDate).sort()
+
+    return (
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">
+            안녕하세요, {profile?.full_name || profile?.email?.split('@')[0]}님!
+          </h1>
+          <p className="text-gray-400 mt-1">나의 학습 현황</p>
+          {studentId && (
+            <Link
+              href={`/students/${studentId}`}
+              className="inline-flex items-center gap-1 mt-3 text-sm text-blue-400 hover:text-blue-300 transition"
+            >
+              내 포트폴리오 보기 <ChevronRight className="w-4 h-4" />
+            </Link>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Assignments section */}
+          <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-700">
+              <ClipboardList className="w-5 h-5 text-orange-400" />
+              <h2 className="font-semibold text-white">마감 임박 과제</h2>
+            </div>
+            <div className="divide-y divide-gray-700">
+              {studentAssignments.length === 0 ? (
+                <div className="px-5 py-8 text-center text-gray-500">미완료 과제가 없습니다</div>
+              ) : (
+                studentAssignments.map((assignment) => {
+                  const daysLeft = getDaysUntil(assignment.due_date)
+                  let urgencyColor = 'text-gray-400'
+                  let urgencyBg = 'bg-gray-700'
+                  let urgencyLabel = `${daysLeft}일 남음`
+                  if (daysLeft < 0) {
+                    urgencyColor = 'text-red-400'
+                    urgencyBg = 'bg-red-900/40'
+                    urgencyLabel = `${Math.abs(daysLeft)}일 지남`
+                  } else if (daysLeft <= 7) {
+                    urgencyColor = 'text-red-400'
+                    urgencyBg = 'bg-red-900/40'
+                  } else if (daysLeft <= 14) {
+                    urgencyColor = 'text-yellow-400'
+                    urgencyBg = 'bg-yellow-900/40'
+                  }
+
+                  const statusLabel = assignment.status === 'in_progress' ? '진행중' : '미시작'
+                  const statusColor = assignment.status === 'in_progress'
+                    ? 'bg-blue-900/40 text-blue-400'
+                    : 'bg-gray-700 text-gray-400'
+
+                  return (
+                    <div key={assignment.id} className="px-5 py-3.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            {daysLeft <= 7 && (
+                              <AlertTriangle className={`w-3.5 h-3.5 flex-shrink-0 ${urgencyColor}`} />
+                            )}
+                            <span className="text-sm font-medium text-white truncate">{assignment.title}</span>
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            {assignment.category} · 마감: {assignment.due_date}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className={`text-xs px-2 py-1 rounded-full ${statusColor}`}>
+                            {statusLabel}
+                          </span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${urgencyBg} ${urgencyColor}`}>
+                            {urgencyLabel}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Schedules section */}
+          <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-700">
+              <Calendar className="w-5 h-5 text-cyan-400" />
+              <h2 className="font-semibold text-white">이번 주 일정</h2>
+            </div>
+            <div className="divide-y divide-gray-700">
+              {sortedDates.length === 0 ? (
+                <div className="px-5 py-8 text-center text-gray-500">이번 주 예정된 일정이 없습니다</div>
+              ) : (
+                sortedDates.map((date) => (
+                  <div key={date} className="px-5 py-3">
+                    <div className="text-xs font-medium text-gray-400 mb-2">
+                      {date} ({getDayLabel(date)})
+                    </div>
+                    <div className="space-y-2">
+                      {schedulesByDate[date].map((sched) => (
+                        <div key={sched.id} className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-white truncate">{sched.title}</div>
+                            {sched.event_time && (
+                              <div className="text-xs text-gray-400 mt-0.5">
+                                {sched.event_time.slice(0, 5)}
+                              </div>
+                            )}
+                          </div>
+                          {sched.type && (
+                            <span className="text-xs px-2 py-1 bg-gray-700 text-gray-300 rounded-full flex-shrink-0">
+                              {sched.type}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     )
   }

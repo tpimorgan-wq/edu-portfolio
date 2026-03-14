@@ -171,6 +171,17 @@ export interface Message {
   created_at: string
 }
 
+export interface Contract {
+  id: string
+  student_id: string
+  file_url: string
+  file_name: string
+  file_path: string
+  uploaded_by: string
+  uploader_name: string
+  created_at: string
+}
+
 export interface DashboardStats {
   totalStudents: number
   activeStudents: number

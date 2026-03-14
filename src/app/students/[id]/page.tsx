@@ -16,6 +16,7 @@ import EssaysTab from '@/components/tabs/EssaysTab'
 import SchedulesTab from '@/components/tabs/SchedulesTab'
 import ConsultNotesTab from '@/components/tabs/ConsultNotesTab'
 import AssignmentsTab from '@/components/tabs/AssignmentsTab'
+import ContractsTab from '@/components/tabs/ContractsTab'
 import { ArrowLeft } from 'lucide-react'
 
 const BASE_TABS = [
@@ -28,6 +29,7 @@ const BASE_TABS = [
   { id: 'essays', label: '에세이' },
   { id: 'assignments', label: '과제관리' },
   { id: 'schedules', label: '월별일정' },
+  { id: 'contracts', label: '계약서', roles: ['admin', 'parent'] },
   { id: 'consult_notes', label: '상담노트', roles: ['admin', 'consultant'] },
 ]
 
@@ -244,6 +246,9 @@ export default function StudentDetailPage() {
           )}
           {activeTab === 'schedules' && currentUser && (
             <SchedulesTab studentId={studentId} userRole={currentUser.role} />
+          )}
+          {activeTab === 'contracts' && currentUser && (currentUser.role === 'admin' || currentUser.role === 'parent') && (
+            <ContractsTab studentId={studentId} userRole={currentUser.role} userId={currentUser.id} userName={currentUser.full_name || currentUser.email} />
           )}
           {activeTab === 'consult_notes' && currentUser && (currentUser.role === 'admin' || currentUser.role === 'consultant') && (
             <ConsultNotesTab

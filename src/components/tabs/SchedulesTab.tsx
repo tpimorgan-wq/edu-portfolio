@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/firebase/db'
-import { Schedule } from '@/types'
+import { Schedule, Assignment } from '@/types'
 import {
   Plus, Trash2, Save, X, Calendar, CheckCircle, Clock, XCircle,
   ChevronLeft, ChevronRight, Video,
@@ -29,6 +29,12 @@ const statusConfig = {
   upcoming: { label: '예정', color: 'bg-blue-900/40 text-blue-400 border-blue-700', dot: 'bg-blue-400', icon: <Clock className="w-3.5 h-3.5" /> },
   completed: { label: '완료', color: 'bg-green-900/40 text-green-400 border-green-700', dot: 'bg-green-400', icon: <CheckCircle className="w-3.5 h-3.5" /> },
   cancelled: { label: '취소', color: 'bg-red-900/40 text-red-400 border-red-700', dot: 'bg-red-400', icon: <XCircle className="w-3.5 h-3.5" /> },
+}
+
+const assignmentStatusConfig = {
+  todo: { label: '할 일', color: 'bg-orange-900/40 text-orange-400 border-orange-700', dot: 'bg-orange-400', icon: <Clock className="w-3.5 h-3.5" /> },
+  in_progress: { label: '진행 중', color: 'bg-yellow-900/40 text-yellow-400 border-yellow-700', dot: 'bg-yellow-400', icon: <Clock className="w-3.5 h-3.5" /> },
+  done: { label: '완료', color: 'bg-green-900/40 text-green-400 border-green-700', dot: 'bg-green-400', icon: <CheckCircle className="w-3.5 h-3.5" /> },
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
@@ -74,6 +80,7 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
   const canEdit = true
   const today = new Date()
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [assignments, setAssignments] = useState<Assignment[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -89,12 +96,12 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
   const fetchSchedules = async () => {
     try {
       const db = createClient()
-      const { data } = await db
-        .from('schedules')
-        .select('*')
-        .eq('student_id', studentId)
-        .order('event_date', { ascending: true })
-      setSchedules(data || [])
+      const [schedulesRes, assignmentsRes] = await Promise.all([
+        db.from('schedules').select('*').eq('student_id', studentId).order('event_date', { ascending: true }),
+        db.from('assignments').select('*').eq('student_id', studentId).order('due_date', { ascending: true }),
+      ])
+      setSchedules(schedulesRes.data || [])
+      setAssignments(assignmentsRes.data || [])
     } catch (err) {
       console.error('Failed to fetch schedules:', err)
     } finally {
@@ -136,6 +143,12 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     if (selectedEvent?.id === id) setSelectedEvent({ ...selectedEvent, status })
   }
 
+  const handleAssignmentStatusChange = async (id: string, status: Assignment['status']) => {
+    const db = createClient()
+    await db.from('assignments').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
+    setAssignments(prev => prev.map(a => a.id === id ? { ...a, status } : a))
+  }
+
   const handleDelete = async (id: string) => {
     if (!confirm('이 일정을 삭제하시겠습니까?')) return
     const db = createClient()
@@ -163,6 +176,13 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     eventsByDate[s.event_date].push(s)
   }
 
+  // Map date → assignments by due_date
+  const assignmentsByDate: Record<string, Assignment[]> = {}
+  for (const a of assignments) {
+    if (!assignmentsByDate[a.due_date]) assignmentsByDate[a.due_date] = []
+    assignmentsByDate[a.due_date].push(a)
+  }
+
   const handleDateClick = (dateStr: string) => {
     setSelectedEvent(null)
     if (selectedDate === dateStr) {
@@ -178,8 +198,9 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     setSelectedDate(null)
   }
 
-  // Events for selected date
+  // Events and assignments for selected date
   const selectedDateEvents = selectedDate ? (eventsByDate[selectedDate] || []) : []
+  const selectedDateAssignments = selectedDate ? (assignmentsByDate[selectedDate] || []) : []
 
   if (loading) return (
     <div className="flex items-center justify-center h-32">
@@ -314,6 +335,18 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
         </button>
       </div>
 
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-gray-400">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />
+          일정
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block" />
+          과제 마감
+        </span>
+      </div>
+
       {/* Calendar Grid */}
       <div className="bg-gray-750 rounded-xl border border-gray-700 overflow-hidden">
         {/* Weekday headers */}
@@ -329,9 +362,12 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
         <div className="grid grid-cols-7">
           {calendarDays.map((cell, idx) => {
             const events = eventsByDate[cell.dateStr] || []
+            const dateAssignments = assignmentsByDate[cell.dateStr] || []
             const isToday = cell.dateStr === todayStr
             const isSelected = cell.dateStr === selectedDate
             const dayOfWeek = idx % 7
+            const totalItems = events.length + dateAssignments.length
+            const maxVisible = 2
 
             return (
               <button
@@ -349,19 +385,45 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                 `}>
                   {cell.day}
                 </span>
-                {events.length > 0 && (
+                {totalItems > 0 && (
                   <div className="mt-0.5 space-y-0.5">
-                    {events.slice(0, 2).map(ev => (
-                      <div
-                        key={ev.id}
-                        className={`text-[10px] leading-tight px-1 py-0.5 rounded truncate cursor-pointer ${statusConfig[ev.status].color}`}
-                        onClick={e => { e.stopPropagation(); setSelectedEvent(ev); setSelectedDate(cell.dateStr) }}
-                      >
-                        {ev.title}
-                      </div>
-                    ))}
-                    {events.length > 2 && (
-                      <div className="text-[10px] text-gray-500 px-1">+{events.length - 2}개</div>
+                    {/* Render schedule events first, then assignments, up to maxVisible total */}
+                    {(() => {
+                      const items: React.ReactNode[] = []
+                      let count = 0
+
+                      for (const ev of events) {
+                        if (count >= maxVisible) break
+                        items.push(
+                          <div
+                            key={`s-${ev.id}`}
+                            className={`text-[10px] leading-tight px-1 py-0.5 rounded truncate cursor-pointer ${statusConfig[ev.status].color}`}
+                            onClick={e => { e.stopPropagation(); setSelectedEvent(ev); setSelectedDate(cell.dateStr) }}
+                          >
+                            {ev.title}
+                          </div>
+                        )
+                        count++
+                      }
+
+                      for (const asn of dateAssignments) {
+                        if (count >= maxVisible) break
+                        items.push(
+                          <div
+                            key={`a-${asn.id}`}
+                            className={`text-[10px] leading-tight px-1 py-0.5 rounded truncate cursor-pointer ${assignmentStatusConfig[asn.status].color}`}
+                            onClick={e => { e.stopPropagation(); setSelectedDate(cell.dateStr) }}
+                          >
+                            {asn.title}
+                          </div>
+                        )
+                        count++
+                      }
+
+                      return items
+                    })()}
+                    {totalItems > maxVisible && (
+                      <div className="text-[10px] text-gray-500 px-1">+{totalItems - maxVisible}개</div>
                     )}
                   </div>
                 )}
@@ -394,9 +456,8 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
             </div>
           </div>
 
-          {selectedDateEvents.length === 0 ? (
-            <p className="text-sm text-gray-500 py-2">이 날짜에 일정이 없습니다.</p>
-          ) : (
+          {/* Schedule Events Section */}
+          {selectedDateEvents.length > 0 && (
             <div className="space-y-2">
               {selectedDateEvents.map(event => (
                 <div
@@ -465,6 +526,63 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                 </div>
               ))}
             </div>
+          )}
+
+          {/* Assignments Section */}
+          {selectedDateAssignments.length > 0 && (
+            <div className="space-y-2">
+              <h5 className="text-xs font-semibold text-orange-400 uppercase tracking-wide flex items-center gap-1.5 pt-1">
+                <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
+                과제 마감
+              </h5>
+              {selectedDateAssignments.map(asn => (
+                <div
+                  key={asn.id}
+                  className="rounded-lg border border-gray-700 hover:border-gray-600 p-3 transition"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-white">{asn.title}</div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${assignmentStatusConfig[asn.status].color}`}>
+                          {assignmentStatusConfig[asn.status].icon}
+                          {assignmentStatusConfig[asn.status].label}
+                        </span>
+                        <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">{asn.category}</span>
+                      </div>
+                      {asn.description && (
+                        <p className="text-xs text-gray-400 mt-1.5 whitespace-pre-wrap">{asn.description}</p>
+                      )}
+                    </div>
+                    {canEdit && asn.status !== 'done' && (
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {asn.status === 'todo' && (
+                          <button
+                            onClick={() => handleAssignmentStatusChange(asn.id, 'in_progress')}
+                            className="p-1.5 text-gray-500 hover:text-yellow-400 hover:bg-gray-700 rounded-lg transition"
+                            title="진행 중으로 변경"
+                          >
+                            <Clock className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleAssignmentStatusChange(asn.id, 'done')}
+                          className="p-1.5 text-gray-500 hover:text-green-400 hover:bg-gray-700 rounded-lg transition"
+                          title="완료 처리"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {selectedDateEvents.length === 0 && selectedDateAssignments.length === 0 && (
+            <p className="text-sm text-gray-500 py-2">이 날짜에 일정이 없습니다.</p>
           )}
         </div>
       )}
