@@ -440,7 +440,7 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
             }
 
             return (
-              <div key={a.id} className="bg-gray-750 border border-gray-700 rounded-xl p-4 cursor-pointer" onDoubleClick={() => setDetailAssignment(a)}>
+              <div key={a.id} className="bg-gray-750 border border-gray-700 rounded-xl p-4 cursor-pointer hover:border-gray-600 transition" onClick={() => setDetailAssignment(a)}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -448,54 +448,30 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${categoryColors[a.category] || categoryColors['기타']}`}>
                         {a.category}
                       </span>
+                      {a.file_url && <Paperclip className="w-3 h-3 text-blue-400" />}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${statusConfig[a.status].color}`}>
                         {statusConfig[a.status].label}
                       </span>
-                      <span className="text-xs text-gray-500">부여: {a.assigned_date}</span>
                       <span className="text-xs text-gray-500">마감: {a.due_date}</span>
                       {dueInfo && (
                         <span className={`text-xs font-medium ${dueInfo.color}`}>{dueInfo.label}</span>
                       )}
                     </div>
-                    {a.description && (
-                      <p className="text-xs text-gray-400 mt-2">{a.description}</p>
-                    )}
-                    {a.file_url && a.file_name && (
-                      <button
-                        onClick={() => handleDownload(a.file_url!, a.file_name!)}
-                        className="flex items-center gap-1.5 mt-2 px-2.5 py-1 bg-gray-700 hover:bg-gray-600 text-blue-400 rounded-lg text-xs transition border border-gray-600"
-                      >
-                        <Download className="w-3 h-3" />
-                        {a.file_name}
-                      </button>
-                    )}
                   </div>
                   {(canChangeStatus) && (
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {(canChangeStatus) && a.status === 'todo' && (
-                        <button onClick={() => handleStatusChange(a.id, 'in_progress')}
+                        <button onClick={e => { e.stopPropagation(); handleStatusChange(a.id, 'in_progress') }}
                           className="px-2 py-1 text-[10px] bg-yellow-900/30 text-yellow-400 hover:bg-yellow-900/50 rounded-lg transition" title="진행중으로">
                           진행
                         </button>
                       )}
                       {(canChangeStatus) && (a.status === 'todo' || a.status === 'in_progress') && (
-                        <button onClick={() => handleStatusChange(a.id, 'done')}
+                        <button onClick={e => { e.stopPropagation(); handleStatusChange(a.id, 'done') }}
                           className="px-2 py-1 text-[10px] bg-green-900/30 text-green-400 hover:bg-green-900/50 rounded-lg transition" title="완료 처리">
                           완료
-                        </button>
-                      )}
-                      {canManage && (
-                        <button onClick={() => handleStartEdit(a)}
-                          className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-gray-700 rounded-lg transition" title="수정">
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                      )}
-                      {canManage && (
-                        <button onClick={() => handleDelete(a.id)}
-                          className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-gray-700 rounded-lg transition" title="삭제">
-                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>

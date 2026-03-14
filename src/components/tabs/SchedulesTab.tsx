@@ -90,7 +90,6 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [selectedEvent, setSelectedEvent] = useState<Schedule | null>(null)
   const [uploading, setUploading] = useState(false)
   const [fileToUpload, setFileToUpload] = useState<File | null>(null)
   const [detailSchedule, setDetailSchedule] = useState<Schedule | null>(null)
@@ -183,7 +182,6 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     const db = createClient()
     await db.from('schedules').update({ status }).eq('id', id)
     setSchedules(prev => prev.map(s => s.id === id ? { ...s, status } : s))
-    if (selectedEvent?.id === id) setSelectedEvent({ ...selectedEvent, status })
   }
 
   const handleAssignmentStatusChange = async (id: string, status: Assignment['status']) => {
@@ -197,7 +195,6 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     const db = createClient()
     await db.from('schedules').delete().eq('id', id)
     setSchedules(prev => prev.filter(s => s.id !== id))
-    if (selectedEvent?.id === id) setSelectedEvent(null)
     if (detailSchedule?.id === id) setDetailSchedule(null)
   }
 
@@ -276,7 +273,6 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
   }
 
   const handleDateClick = (dateStr: string) => {
-    setSelectedEvent(null)
     if (selectedDate === dateStr) {
       setSelectedDate(null)
     } else {
@@ -512,7 +508,7 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                           <div
                             key={`s-${ev.id}`}
                             className={`text-[10px] leading-tight px-1 py-0.5 rounded truncate cursor-pointer ${statusConfig[ev.status].color}`}
-                            onClick={e => { e.stopPropagation(); setSelectedEvent(ev); setSelectedDate(cell.dateStr) }}
+                            onClick={e => { e.stopPropagation(); setDetailSchedule(ev) }}
                           >
                             {ev.title}
                           </div>
@@ -562,7 +558,7 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                 </button>
               )}
               <button
-                onClick={() => { setSelectedDate(null); setSelectedEvent(null) }}
+                onClick={() => setSelectedDate(null)}
                 className="p-1 text-gray-500 hover:text-white rounded-lg transition"
               >
                 <X className="w-4 h-4" />
@@ -576,13 +572,8 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
               {selectedDateEvents.map(event => (
                 <div
                   key={event.id}
-                  onClick={() => setSelectedEvent(selectedEvent?.id === event.id ? null : event)}
-                  onDoubleClick={() => setDetailSchedule(event)}
-                  className={`rounded-lg border p-3 cursor-pointer transition ${
-                    selectedEvent?.id === event.id
-                      ? 'border-blue-500 bg-blue-900/10'
-                      : 'border-gray-700 hover:border-gray-600'
-                  }`}
+                  onClick={() => setDetailSchedule(event)}
+                  className="rounded-lg border border-gray-700 hover:border-gray-600 p-3 cursor-pointer transition"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
@@ -598,56 +589,16 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                         {event.file_url && <Paperclip className="w-3 h-3 text-blue-400" />}
                       </div>
                     </div>
-                    {canEdit && (
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {event.status === 'upcoming' && (
-                          <button
-                            onClick={e => { e.stopPropagation(); handleStatusChange(event.id, 'completed') }}
-                            className="p-1.5 text-gray-500 hover:text-green-400 hover:bg-gray-700 rounded-lg transition"
-                            title="완료 처리"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={e => { e.stopPropagation(); handleDelete(event.id) }}
-                          className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-gray-700 rounded-lg transition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                    {canEdit && event.status === 'upcoming' && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleStatusChange(event.id, 'completed') }}
+                        className="p-1.5 text-gray-500 hover:text-green-400 hover:bg-gray-700 rounded-lg transition flex-shrink-0"
+                        title="완료 처리"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
                     )}
                   </div>
-
-                  {/* Expanded detail */}
-                  {selectedEvent?.id === event.id && (event.description || event.zoom_link || event.file_url) && (
-                    <div className="mt-2 pt-2 border-t border-gray-700 space-y-2">
-                      {event.description && (
-                        <p className="text-xs text-gray-400 whitespace-pre-wrap">{event.description}</p>
-                      )}
-                      {event.zoom_link && (
-                        <a
-                          href={event.zoom_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition"
-                        >
-                          <Video className="w-4 h-4" />
-                          줌 미팅 참여
-                        </a>
-                      )}
-                      {event.file_url && event.file_name && (
-                        <button
-                          onClick={e => { e.stopPropagation(); handleDownload(event.file_url!, event.file_name!) }}
-                          className="inline-flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-blue-400 text-xs font-medium rounded-lg transition border border-gray-600"
-                        >
-                          <Download className="w-4 h-4" />
-                          {event.file_name}
-                        </button>
-                      )}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
