@@ -13,6 +13,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko" className="dark">
+      <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#1e293b" />
+        <link rel="apple-touch-icon" href="/logo.png" />
+      </head>
       <body className="bg-gray-900 text-gray-100 min-h-screen antialiased">
         {children}
       </body>
