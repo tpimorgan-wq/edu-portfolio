@@ -23,7 +23,7 @@ const emptyForm = {
   status: 'upcoming' as 'upcoming' | 'completed' | 'cancelled',
 }
 
-const EVENT_TYPES = ['상담', '시험', '제출 마감', '인터뷰', '학교 방문', '캠프', '행사', '기타']
+const EVENT_TYPES = ['수업', '상담', '시험', '제출 마감', '인터뷰', '학교 방문', '캠프', '행사', '기타']
 
 const statusConfig = {
   upcoming: { label: '예정', color: 'bg-blue-900/40 text-blue-400 border-blue-700', dot: 'bg-blue-400', icon: <Clock className="w-3.5 h-3.5" /> },
