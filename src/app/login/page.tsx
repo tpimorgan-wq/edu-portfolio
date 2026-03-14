@@ -72,9 +72,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="산타크로체 에듀펌" className="w-16 h-16 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-white">산타크로체 에듀펌</h1>
-          <p className="text-gray-400 mt-2">컨설팅 포트폴리오 관리 시스템</p>
+          <h2 className="text-lg font-semibold text-blue-400 mb-4">Education Consultant Association</h2>
+          <h1 className="text-2xl font-bold text-white">Education Portfolio Management System</h1>
         </div>
 
         <div className="bg-gray-800 rounded-2xl p-8 shadow-xl border border-gray-700">
@@ -143,7 +142,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-gray-500 text-sm mt-6">
-          계정이 없으신가요? 관리자에게 문의하세요.
+          Don't have an account? Please contact your administrator.
         </p>
       </div>
     </div>
