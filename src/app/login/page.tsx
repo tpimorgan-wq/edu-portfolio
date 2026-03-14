@@ -72,6 +72,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
+          <img src="/icon-192.png" alt="Logo" className="w-20 h-20 rounded-2xl mx-auto mb-4" />
           <h2 className="text-lg font-semibold text-[#F5E6C8] mb-4">Education Consultant Association</h2>
           <h1 className="text-xl font-bold text-white whitespace-nowrap">Education Portfolio Management System</h1>
         </div>
