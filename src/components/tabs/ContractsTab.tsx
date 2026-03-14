@@ -85,7 +85,11 @@ export default function ContractsTab({ studentId, userRole, userId, userName }: 
 
   const handleDownload = async (contract: Contract) => {
     try {
-      const res = await fetch(contract.file_url)
+      const params = new URLSearchParams({
+        url: contract.file_url,
+        filename: contract.file_name,
+      })
+      const res = await fetch(`/api/contracts/download?${params}`)
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
