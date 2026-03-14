@@ -5,7 +5,7 @@ import { createClient } from '@/lib/firebase/db'
 import { Schedule, Assignment } from '@/types'
 import {
   Plus, Trash2, Save, X, Calendar, CheckCircle, Clock, XCircle,
-  ChevronLeft, ChevronRight, Video,
+  ChevronLeft, ChevronRight, Video, Paperclip, Download, Upload,
 } from 'lucide-react'
 
 interface SchedulesTabProps {
@@ -90,6 +90,8 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<Schedule | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null)
 
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
@@ -111,6 +113,27 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
 
   useEffect(() => { fetchSchedules() }, [studentId])
 
+  const uploadFile = async (file: File): Promise<{ url: string; name: string } | null> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('studentId', studentId)
+    const res = await fetch('/api/assignments/upload', { method: 'POST', body: fd })
+    if (!res.ok) return null
+    const data = await res.json()
+    return { url: data.url, name: file.name }
+  }
+
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    const res = await fetch(`/api/contracts/download?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(fileName)}`)
+    if (!res.ok) return
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = fileName
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   const handleAdd = async () => {
     if (!form.title || !form.event_date) {
       setError('제목과 날짜는 필수입니다.')
@@ -118,8 +141,17 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     }
     setSaving(true)
     setError(null)
+
+    let fileData: { url: string; name: string } | null = null
+    if (fileToUpload) {
+      setUploading(true)
+      fileData = await uploadFile(fileToUpload)
+      setUploading(false)
+      if (!fileData) { setError('파일 업로드에 실패했습니다.'); setSaving(false); return }
+    }
+
     const db = createClient()
-    const { error: err } = await db.from('schedules').insert({
+    const insertData: Record<string, any> = {
       student_id: studentId,
       title: form.title,
       description: form.description || null,
@@ -128,9 +160,15 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
       type: form.type || null,
       zoom_link: form.zoom_link || null,
       status: form.status,
-    })
+    }
+    if (fileData) {
+      insertData.file_url = fileData.url
+      insertData.file_name = fileData.name
+    }
+    const { error: err } = await db.from('schedules').insert(insertData)
     if (err) { setError(err.message); setSaving(false); return }
     setForm(emptyForm)
+    setFileToUpload(null)
     setShowForm(false)
     fetchSchedules()
     setSaving(false)
@@ -299,19 +337,41 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
               />
             </div>
           </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+              <Paperclip className="w-3 h-3" /> 파일 첨부 (PDF)
+            </label>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm cursor-pointer transition border border-gray-600">
+                <Upload className="w-3.5 h-3.5" />
+                {fileToUpload ? fileToUpload.name : '파일 선택'}
+                <input
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={e => setFileToUpload(e.target.files?.[0] || null)}
+                />
+              </label>
+              {fileToUpload && (
+                <button onClick={() => setFileToUpload(null)} className="p-1 text-gray-500 hover:text-red-400 transition">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
           <div className="flex gap-2 justify-end">
             <button
-              onClick={() => { setShowForm(false); setForm(emptyForm); setError(null) }}
+              onClick={() => { setShowForm(false); setForm(emptyForm); setFileToUpload(null); setError(null) }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm transition"
             >
               <X className="w-3.5 h-3.5" /> 취소
             </button>
             <button
               onClick={handleAdd}
-              disabled={saving}
+              disabled={saving || uploading}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition"
             >
-              <Save className="w-3.5 h-3.5" /> {saving ? '저장 중...' : '저장'}
+              <Save className="w-3.5 h-3.5" /> {uploading ? '업로드 중...' : saving ? '저장 중...' : '저장'}
             </button>
           </div>
         </div>
@@ -480,6 +540,7 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                         {event.event_time && <span className="text-xs text-gray-400">{event.event_time.slice(0, 5)}</span>}
                         {event.type && <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">{event.type}</span>}
                         {event.zoom_link && <Video className="w-3 h-3 text-blue-400" />}
+                        {event.file_url && <Paperclip className="w-3 h-3 text-blue-400" />}
                       </div>
                     </div>
                     {canEdit && (
@@ -504,7 +565,7 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                   </div>
 
                   {/* Expanded detail */}
-                  {selectedEvent?.id === event.id && (event.description || event.zoom_link) && (
+                  {selectedEvent?.id === event.id && (event.description || event.zoom_link || event.file_url) && (
                     <div className="mt-2 pt-2 border-t border-gray-700 space-y-2">
                       {event.description && (
                         <p className="text-xs text-gray-400 whitespace-pre-wrap">{event.description}</p>
@@ -520,6 +581,15 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                           <Video className="w-4 h-4" />
                           줌 미팅 참여
                         </a>
+                      )}
+                      {event.file_url && event.file_name && (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDownload(event.file_url!, event.file_name!) }}
+                          className="inline-flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-blue-400 text-xs font-medium rounded-lg transition border border-gray-600"
+                        >
+                          <Download className="w-4 h-4" />
+                          {event.file_name}
+                        </button>
                       )}
                     </div>
                   )}

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/firebase/db'
 import { Assignment, UserRole } from '@/types'
 import { recordTabUpdate } from '@/lib/tab-update'
 import TabUpdateBanner from '@/components/TabUpdateBanner'
-import { Plus, Trash2, Save, X, ClipboardList, Edit2 } from 'lucide-react'
+import { Plus, Trash2, Save, X, ClipboardList, Edit2, Paperclip, Download, Upload } from 'lucide-react'
 
 interface AssignmentsTabProps {
   studentId: string
@@ -52,6 +52,9 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState(emptyForm)
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [uploading, setUploading] = useState(false)
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null)
+  const [editFileToUpload, setEditFileToUpload] = useState<File | null>(null)
 
   const fetchAssignments = async () => {
     try {
@@ -71,6 +74,27 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
 
   useEffect(() => { fetchAssignments() }, [studentId])
 
+  const uploadFile = async (file: File): Promise<{ url: string; name: string } | null> => {
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('studentId', studentId)
+    const res = await fetch('/api/assignments/upload', { method: 'POST', body: fd })
+    if (!res.ok) return null
+    const data = await res.json()
+    return { url: data.url, name: file.name }
+  }
+
+  const handleDownload = async (fileUrl: string, fileName: string) => {
+    const res = await fetch(`/api/contracts/download?url=${encodeURIComponent(fileUrl)}&filename=${encodeURIComponent(fileName)}`)
+    if (!res.ok) return
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = fileName
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
   const handleAdd = async () => {
     if (!form.title || !form.due_date || !form.category) {
       setError('과제 이름, 카테고리, 마감 기한은 필수입니다.')
@@ -78,9 +102,18 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
     }
     setSaving(true)
     setError(null)
+
+    let fileData: { url: string; name: string } | null = null
+    if (fileToUpload) {
+      setUploading(true)
+      fileData = await uploadFile(fileToUpload)
+      setUploading(false)
+      if (!fileData) { setError('파일 업로드에 실패했습니다.'); setSaving(false); return }
+    }
+
     const db = createClient()
     const now = new Date().toISOString()
-    const { error: err } = await db.from('assignments').insert({
+    const insertData: Record<string, any> = {
       student_id: studentId,
       title: form.title,
       category: form.category,
@@ -89,9 +122,15 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
       assigned_date: form.assigned_date,
       due_date: form.due_date,
       updated_at: now,
-    })
+    }
+    if (fileData) {
+      insertData.file_url = fileData.url
+      insertData.file_name = fileData.name
+    }
+    const { error: err } = await db.from('assignments').insert(insertData)
     if (err) { setError(err.message); setSaving(false); return }
     setForm(emptyForm)
+    setFileToUpload(null)
     setShowForm(false)
     fetchAssignments()
     setSaving(false)
@@ -112,8 +151,18 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
 
   const handleUpdate = async (id: string) => {
     if (!editForm.title || !editForm.due_date || !editForm.category) return
+    setSaving(true)
+
+    let fileData: { url: string; name: string } | null = null
+    if (editFileToUpload) {
+      setUploading(true)
+      fileData = await uploadFile(editFileToUpload)
+      setUploading(false)
+      if (!fileData) { setError('파일 업로드에 실패했습니다.'); setSaving(false); return }
+    }
+
     const db = createClient()
-    await db.from('assignments').update({
+    const updateData: Record<string, any> = {
       title: editForm.title,
       category: editForm.category,
       status: editForm.status,
@@ -121,8 +170,15 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
       assigned_date: editForm.assigned_date,
       due_date: editForm.due_date,
       updated_at: new Date().toISOString(),
-    }).eq('id', id)
+    }
+    if (fileData) {
+      updateData.file_url = fileData.url
+      updateData.file_name = fileData.name
+    }
+    await db.from('assignments').update(updateData).eq('id', id)
     setEditingId(null)
+    setEditFileToUpload(null)
+    setSaving(false)
     fetchAssignments()
   }
 
@@ -253,19 +309,41 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
               />
             </div>
           </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+              <Paperclip className="w-3 h-3" /> 파일 첨부 (PDF)
+            </label>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm cursor-pointer transition border border-gray-600">
+                <Upload className="w-3.5 h-3.5" />
+                {fileToUpload ? fileToUpload.name : '파일 선택'}
+                <input
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={e => setFileToUpload(e.target.files?.[0] || null)}
+                />
+              </label>
+              {fileToUpload && (
+                <button onClick={() => setFileToUpload(null)} className="p-1 text-gray-500 hover:text-red-400 transition">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
           <div className="flex gap-2 justify-end">
             <button
-              onClick={() => { setShowForm(false); setForm(emptyForm); setError(null) }}
+              onClick={() => { setShowForm(false); setForm(emptyForm); setFileToUpload(null); setError(null) }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm transition"
             >
               <X className="w-3.5 h-3.5" /> 취소
             </button>
             <button
               onClick={handleAdd}
-              disabled={saving}
+              disabled={saving || uploading}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition"
             >
-              <Save className="w-3.5 h-3.5" /> {saving ? '저장 중...' : '저장'}
+              <Save className="w-3.5 h-3.5" /> {uploading ? '업로드 중...' : saving ? '저장 중...' : '저장'}
             </button>
           </div>
         </div>
@@ -319,14 +397,41 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
                         className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                     </div>
                   </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+                      <Paperclip className="w-3 h-3" /> 파일 첨부 (PDF)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {a.file_url && !editFileToUpload && (
+                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                          <Paperclip className="w-3 h-3" /> {a.file_name || '첨부 파일'}
+                        </span>
+                      )}
+                      <label className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-xs cursor-pointer transition border border-gray-600">
+                        <Upload className="w-3 h-3" />
+                        {editFileToUpload ? editFileToUpload.name : (a.file_url ? '파일 변경' : '파일 선택')}
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          className="hidden"
+                          onChange={e => setEditFileToUpload(e.target.files?.[0] || null)}
+                        />
+                      </label>
+                      {editFileToUpload && (
+                        <button onClick={() => setEditFileToUpload(null)} className="p-1 text-gray-500 hover:text-red-400 transition">
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <div className="flex gap-2 justify-end">
-                    <button onClick={() => setEditingId(null)}
+                    <button onClick={() => { setEditingId(null); setEditFileToUpload(null) }}
                       className="flex items-center gap-1 px-2.5 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-xs transition">
                       <X className="w-3 h-3" /> 취소
                     </button>
-                    <button onClick={() => handleUpdate(a.id)}
+                    <button onClick={() => handleUpdate(a.id)} disabled={saving || uploading}
                       className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs transition">
-                      <Save className="w-3 h-3" /> 저장
+                      <Save className="w-3 h-3" /> {uploading ? '업로드 중...' : '저장'}
                     </button>
                   </div>
                 </div>
@@ -355,6 +460,15 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
                     </div>
                     {a.description && (
                       <p className="text-xs text-gray-400 mt-2">{a.description}</p>
+                    )}
+                    {a.file_url && a.file_name && (
+                      <button
+                        onClick={() => handleDownload(a.file_url!, a.file_name!)}
+                        className="flex items-center gap-1.5 mt-2 px-2.5 py-1 bg-gray-700 hover:bg-gray-600 text-blue-400 rounded-lg text-xs transition border border-gray-600"
+                      >
+                        <Download className="w-3 h-3" />
+                        {a.file_name}
+                      </button>
                     )}
                   </div>
                   {(canChangeStatus) && (

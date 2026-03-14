@@ -113,6 +113,8 @@ export interface Schedule {
   type: string | null
   zoom_link: string | null
   status: 'upcoming' | 'completed' | 'cancelled'
+  file_url?: string
+  file_name?: string
   created_at: string
 }
 
@@ -136,6 +138,8 @@ export interface Assignment {
   description: string | null
   assigned_date: string
   due_date: string
+  file_url?: string
+  file_name?: string
   created_at: string
   updated_at: string
 }
