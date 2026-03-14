@@ -13,6 +13,7 @@ export default function NewStudentPage() {
   const router = useRouter()
   const [consultants, setConsultants] = useState<Profile[]>([])
   const [parents, setParents] = useState<Profile[]>([])
+  const [studentAccounts, setStudentAccounts] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
 
@@ -35,13 +36,15 @@ export default function NewStudentPage() {
 
       setAuthorized(true)
 
-      const [{ data: cons }, { data: pars }] = await Promise.all([
+      const [{ data: cons }, { data: pars }, { data: stuAccounts }] = await Promise.all([
         db.from('profiles').select('*').eq('role', 'consultant').order('full_name'),
         db.from('profiles').select('*').eq('role', 'parent').order('full_name'),
+        db.from('profiles').select('*').eq('role', 'student').order('full_name'),
       ])
 
       setConsultants(cons || [])
       setParents(pars || [])
+      setStudentAccounts(stuAccounts || [])
       setLoading(false)
     }
     init()
@@ -83,6 +86,7 @@ export default function NewStudentPage() {
         <StudentForm
           consultants={consultants}
           parents={parents}
+          studentAccounts={studentAccounts}
           onSuccess={handleSuccess}
           onCancel={() => router.push('/students')}
         />

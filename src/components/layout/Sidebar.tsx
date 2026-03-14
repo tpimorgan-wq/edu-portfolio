@@ -127,6 +127,25 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
             var studentMap: Record<string, string> = {}
             for (const s of students) studentMap[s.id] = (s as any).name
           }
+        } else if (role === 'student') {
+          // student: match by user_id first, fallback to name matching
+          const { data: students } = await db.from('students').select('id, name').eq('user_id', userId)
+          if (students && students.length > 0) {
+            studentIds = students.map((s: any) => s.id)
+            var studentMap: Record<string, string> = {}
+            for (const s of students) studentMap[s.id] = (s as any).name
+          } else {
+            // fallback: match profile full_name to student name
+            const { data: profile } = await db.from('profiles').select('full_name').eq('id', userId).single()
+            if (profile?.full_name) {
+              const { data: matched } = await db.from('students').select('id, name').eq('name', profile.full_name)
+              if (matched && matched.length > 0) {
+                studentIds = matched.map((s: any) => s.id)
+                var studentMap: Record<string, string> = {}
+                for (const s of matched) studentMap[s.id] = (s as any).name
+              }
+            }
+          }
         } else {
           // parent
           const { data: students } = await db.from('students').select('id, name').eq('parent_id', userId)

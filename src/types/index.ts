@@ -22,6 +22,7 @@ export interface Student {
   main_consultant_id: string | null
   consultant_ids: string[] | null
   parent_id: string | null
+  user_id: string | null
   notes: string | null
   status: 'active' | 'inactive' | 'graduated'
   created_at: string

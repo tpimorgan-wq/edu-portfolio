@@ -9,6 +9,7 @@ interface StudentFormProps {
   student?: Student
   consultants: Profile[]
   parents: Profile[]
+  studentAccounts?: Profile[]
   onSuccess: (student: Student) => void
   onCancel: () => void
 }
@@ -17,6 +18,7 @@ export default function StudentForm({
   student,
   consultants,
   parents,
+  studentAccounts,
   onSuccess,
   onCancel,
 }: StudentFormProps) {
@@ -31,6 +33,7 @@ export default function StudentForm({
     main_consultant_id: student?.main_consultant_id || '',
     consultant_ids: student?.consultant_ids || [] as string[],
     parent_id: student?.parent_id || '',
+    user_id: student?.user_id || '',
     notes: student?.notes || '',
     status: student?.status || 'active',
   })
@@ -60,6 +63,7 @@ export default function StudentForm({
       main_consultant_id: form.main_consultant_id || null,
       consultant_ids: form.consultant_ids.filter(Boolean).length > 0 ? form.consultant_ids.filter(Boolean) : null,
       parent_id: form.parent_id || null,
+      user_id: form.user_id || null,
       notes: form.notes.trim() || null,
       status: form.status,
     }
@@ -315,6 +319,23 @@ export default function StudentForm({
               ))}
             </select>
           </div>
+
+          {/* 학생 계정 */}
+          {studentAccounts && studentAccounts.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">학생 계정</label>
+              <select
+                value={form.user_id}
+                onChange={e => setForm({ ...form, user_id: e.target.value })}
+                className={selectClass}
+              >
+                <option value="">선택 안함</option>
+                {studentAccounts.map(s => (
+                  <option key={s.id} value={s.id}>{s.full_name || s.email}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Notes */}
