@@ -83,6 +83,23 @@ export default function ContractsTab({ studentId, userRole, userId, userName }: 
     }
   }
 
+  const handleDownload = async (contract: Contract) => {
+    try {
+      const res = await fetch(contract.file_url)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = contract.file_name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Download failed:', err)
+    }
+  }
+
   const handleDelete = async (contract: Contract) => {
     if (!confirm('이 계약서를 삭제하시겠습니까?')) return
 
@@ -180,15 +197,12 @@ export default function ContractsTab({ studentId, userRole, userId, userName }: 
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-white flex items-center gap-2">
                       <span className="truncate">{contract.file_name}</span>
-                      <a
-                        href={contract.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDownload(contract) }}
                         className="text-blue-400 hover:text-blue-300 flex-shrink-0"
-                        onClick={e => e.stopPropagation()}
                       >
                         <Download className="w-3.5 h-3.5" />
-                      </a>
+                      </button>
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       {contract.uploader_name} &middot; {contract.created_at?.split('T')[0]}
