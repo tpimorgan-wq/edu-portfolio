@@ -277,7 +277,7 @@ export default function Sidebar({ role, userId, isOpen, onClose }: SidebarProps)
         {/* Logo */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-gray-700">
           <Link href="/dashboard" className="flex items-center gap-3">
-            <img src="/logo.png" alt="산타크로체 에듀펌" className="w-9 h-9 rounded-xl flex-shrink-0" />
+            <img src="/icon-192.png" alt="산타크로체 에듀펌" className="w-9 h-9 rounded-xl flex-shrink-0" />
             <div>
               <div className="text-sm font-bold text-white leading-tight">산타크로체 에듀펌</div>
               <div className="text-xs text-gray-400">컨설팅 포트폴리오 관리</div>
