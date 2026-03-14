@@ -72,12 +72,12 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h2 className="text-lg font-semibold text-[#D4AF37] mb-4">Education Consultant Association</h2>
+          <h2 className="text-lg font-semibold text-[#B8960C] mb-4">Education Consultant Association</h2>
           <h1 className="text-xl font-bold text-white whitespace-nowrap">Education Portfolio Management System</h1>
         </div>
 
         <div className="bg-gray-800 rounded-2xl p-8 shadow-xl border border-gray-700">
-          <h2 className="text-xl font-semibold text-[#D4AF37] mb-6">Sign In</h2>
+          <h2 className="text-xl font-semibold text-[#B8960C] mb-6">Sign In</h2>
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
@@ -126,7 +126,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition duration-200"
+              className="w-full py-3 bg-[#B8960C] hover:bg-[#9A7A0A] disabled:bg-[#B8960C]/50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition duration-200"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
