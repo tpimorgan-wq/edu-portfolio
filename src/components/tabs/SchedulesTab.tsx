@@ -5,7 +5,7 @@ import { createClient } from '@/lib/firebase/db'
 import { Schedule, Assignment } from '@/types'
 import {
   Plus, Trash2, Save, X, Calendar, CheckCircle, Clock, XCircle,
-  ChevronLeft, ChevronRight, Video, Paperclip, Download, Upload,
+  ChevronLeft, ChevronRight, Video, Paperclip, Download, Upload, Edit2,
 } from 'lucide-react'
 
 interface SchedulesTabProps {
@@ -77,6 +77,7 @@ function getCalendarDays(year: number, month: number) {
 }
 
 export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps) {
+  const canManage = userRole === 'admin' || userRole === 'consultant'
   const canEdit = true
   const today = new Date()
   const [schedules, setSchedules] = useState<Schedule[]>([])
@@ -92,6 +93,10 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
   const [selectedEvent, setSelectedEvent] = useState<Schedule | null>(null)
   const [uploading, setUploading] = useState(false)
   const [fileToUpload, setFileToUpload] = useState<File | null>(null)
+  const [detailSchedule, setDetailSchedule] = useState<Schedule | null>(null)
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
+  const [editScheduleForm, setEditScheduleForm] = useState(emptyForm)
+  const [editScheduleFile, setEditScheduleFile] = useState<File | null>(null)
 
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
@@ -193,6 +198,55 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     await db.from('schedules').delete().eq('id', id)
     setSchedules(prev => prev.filter(s => s.id !== id))
     if (selectedEvent?.id === id) setSelectedEvent(null)
+    if (detailSchedule?.id === id) setDetailSchedule(null)
+  }
+
+  const handleStartEditSchedule = (s: Schedule) => {
+    setEditingSchedule(s)
+    setEditScheduleForm({
+      title: s.title,
+      description: s.description || '',
+      event_date: s.event_date,
+      event_time: s.event_time || '',
+      type: s.type || '',
+      zoom_link: s.zoom_link || '',
+      status: s.status,
+    })
+    setEditScheduleFile(null)
+    setDetailSchedule(null)
+  }
+
+  const handleUpdateSchedule = async () => {
+    if (!editingSchedule || !editScheduleForm.title || !editScheduleForm.event_date) return
+    setSaving(true)
+
+    let fileData: { url: string; name: string } | null = null
+    if (editScheduleFile) {
+      setUploading(true)
+      fileData = await uploadFile(editScheduleFile)
+      setUploading(false)
+      if (!fileData) { setError('파일 업로드에 실패했습니다.'); setSaving(false); return }
+    }
+
+    const db = createClient()
+    const updateData: Record<string, any> = {
+      title: editScheduleForm.title,
+      description: editScheduleForm.description || null,
+      event_date: editScheduleForm.event_date,
+      event_time: editScheduleForm.event_time || null,
+      type: editScheduleForm.type || null,
+      zoom_link: editScheduleForm.zoom_link || null,
+      status: editScheduleForm.status,
+    }
+    if (fileData) {
+      updateData.file_url = fileData.url
+      updateData.file_name = fileData.name
+    }
+    await db.from('schedules').update(updateData).eq('id', editingSchedule.id)
+    setEditingSchedule(null)
+    setEditScheduleFile(null)
+    setSaving(false)
+    fetchSchedules()
   }
 
   const prevMonth = () => {
@@ -523,6 +577,7 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
                 <div
                   key={event.id}
                   onClick={() => setSelectedEvent(selectedEvent?.id === event.id ? null : event)}
+                  onDoubleClick={() => setDetailSchedule(event)}
                   className={`rounded-lg border p-3 cursor-pointer transition ${
                     selectedEvent?.id === event.id
                       ? 'border-blue-500 bg-blue-900/10'
@@ -654,6 +709,192 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
           {selectedDateEvents.length === 0 && selectedDateAssignments.length === 0 && (
             <p className="text-sm text-gray-500 py-2">이 날짜에 일정이 없습니다.</p>
           )}
+        </div>
+      )}
+
+      {/* Schedule Detail Modal */}
+      {detailSchedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setDetailSchedule(null)}>
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-lg mx-4 p-6 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-white">{detailSchedule.title}</h3>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full ${statusConfig[detailSchedule.status].color}`}>
+                    {statusConfig[detailSchedule.status].icon}
+                    {statusConfig[detailSchedule.status].label}
+                  </span>
+                  {detailSchedule.type && (
+                    <span className="text-xs bg-gray-700 text-gray-300 px-2.5 py-1 rounded-full">{detailSchedule.type}</span>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setDetailSchedule(null)} className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded-lg transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Info rows */}
+            <div className="space-y-2.5 text-sm">
+              <div className="flex items-center gap-3">
+                <span className="text-gray-500 w-16 flex-shrink-0">날짜</span>
+                <span className="text-gray-200">{detailSchedule.event_date}</span>
+              </div>
+              {detailSchedule.event_time && (
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-500 w-16 flex-shrink-0">시간</span>
+                  <span className="text-gray-200">{detailSchedule.event_time.slice(0, 5)}</span>
+                </div>
+              )}
+              {detailSchedule.description && (
+                <div>
+                  <span className="text-gray-500 text-xs block mb-1">설명</span>
+                  <p className="text-gray-300 text-sm whitespace-pre-wrap bg-gray-750 rounded-lg p-3 border border-gray-700">{detailSchedule.description}</p>
+                </div>
+              )}
+              {detailSchedule.zoom_link && (
+                <div>
+                  <span className="text-gray-500 text-xs block mb-1">줌 링크</span>
+                  <a
+                    href={detailSchedule.zoom_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition"
+                  >
+                    <Video className="w-4 h-4" />
+                    줌 미팅 참여
+                  </a>
+                </div>
+              )}
+              {detailSchedule.file_url && detailSchedule.file_name && (
+                <div>
+                  <span className="text-gray-500 text-xs block mb-1">첨부 파일</span>
+                  <button
+                    onClick={() => handleDownload(detailSchedule.file_url!, detailSchedule.file_name!)}
+                    className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-blue-400 rounded-lg text-sm transition border border-gray-600"
+                  >
+                    <Download className="w-4 h-4" />
+                    {detailSchedule.file_name}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            {canManage && (
+              <div className="flex items-center gap-2 pt-2 border-t border-gray-700">
+                <button
+                  onClick={() => handleStartEditSchedule(detailSchedule)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> 수정
+                </button>
+                <button
+                  onClick={() => { handleDelete(detailSchedule.id) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm transition border border-red-800"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> 삭제
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Edit Modal */}
+      {editingSchedule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { setEditingSchedule(null); setEditScheduleFile(null) }}>
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-lg mx-4 p-6 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">일정 수정</h3>
+              <button onClick={() => { setEditingSchedule(null); setEditScheduleFile(null) }} className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded-lg transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {error && (
+              <div className="bg-red-900/30 border border-red-700 rounded-lg px-3 py-2 text-red-400 text-xs">{error}</div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">제목 *</label>
+                <input type="text" value={editScheduleForm.title} onChange={e => setEditScheduleForm({ ...editScheduleForm, title: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">날짜 *</label>
+                <input type="date" value={editScheduleForm.event_date} onChange={e => setEditScheduleForm({ ...editScheduleForm, event_date: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">시간</label>
+                <input type="time" value={editScheduleForm.event_time} onChange={e => setEditScheduleForm({ ...editScheduleForm, event_time: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">유형</label>
+                <select value={editScheduleForm.type} onChange={e => setEditScheduleForm({ ...editScheduleForm, type: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">선택</option>
+                  {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">상태</label>
+                <select value={editScheduleForm.status} onChange={e => setEditScheduleForm({ ...editScheduleForm, status: e.target.value as any })}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="upcoming">예정</option>
+                  <option value="completed">완료</option>
+                  <option value="cancelled">취소</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1">설명</label>
+                <textarea value={editScheduleForm.description} onChange={e => setEditScheduleForm({ ...editScheduleForm, description: e.target.value })} rows={2}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+                  <Video className="w-3 h-3" /> 줌 링크
+                </label>
+                <input type="url" value={editScheduleForm.zoom_link} onChange={e => setEditScheduleForm({ ...editScheduleForm, zoom_link: e.target.value })}
+                  placeholder="https://zoom.us/j/..."
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-400 mb-1 flex items-center gap-1">
+                  <Paperclip className="w-3 h-3" /> 파일 첨부 (PDF)
+                </label>
+                <div className="flex items-center gap-2">
+                  {editingSchedule.file_url && !editScheduleFile && (
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <Paperclip className="w-3 h-3" /> {editingSchedule.file_name || '첨부 파일'}
+                    </span>
+                  )}
+                  <label className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-xs cursor-pointer transition border border-gray-600">
+                    <Upload className="w-3 h-3" />
+                    {editScheduleFile ? editScheduleFile.name : (editingSchedule.file_url ? '파일 변경' : '파일 선택')}
+                    <input type="file" accept=".pdf" className="hidden" onChange={e => setEditScheduleFile(e.target.files?.[0] || null)} />
+                  </label>
+                  {editScheduleFile && (
+                    <button onClick={() => setEditScheduleFile(null)} className="p-1 text-gray-500 hover:text-red-400 transition">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end pt-2 border-t border-gray-700">
+              <button onClick={() => { setEditingSchedule(null); setEditScheduleFile(null) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-sm transition">
+                <X className="w-3.5 h-3.5" /> 취소
+              </button>
+              <button onClick={handleUpdateSchedule} disabled={saving || uploading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition">
+                <Save className="w-3.5 h-3.5" /> {uploading ? '업로드 중...' : saving ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

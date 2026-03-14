@@ -55,6 +55,7 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
   const [uploading, setUploading] = useState(false)
   const [fileToUpload, setFileToUpload] = useState<File | null>(null)
   const [editFileToUpload, setEditFileToUpload] = useState<File | null>(null)
+  const [detailAssignment, setDetailAssignment] = useState<Assignment | null>(null)
 
   const fetchAssignments = async () => {
     try {
@@ -439,7 +440,7 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
             }
 
             return (
-              <div key={a.id} className="bg-gray-750 border border-gray-700 rounded-xl p-4">
+              <div key={a.id} className="bg-gray-750 border border-gray-700 rounded-xl p-4 cursor-pointer" onDoubleClick={() => setDetailAssignment(a)}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -503,6 +504,83 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {detailAssignment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setDetailAssignment(null)}>
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-lg mx-4 p-6 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-semibold text-white">{detailAssignment.title}</h3>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${categoryColors[detailAssignment.category] || categoryColors['기타']}`}>
+                    {detailAssignment.category}
+                  </span>
+                  <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full ${statusConfig[detailAssignment.status].color}`}>
+                    {statusConfig[detailAssignment.status].label}
+                  </span>
+                </div>
+              </div>
+              <button onClick={() => setDetailAssignment(null)} className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded-lg transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Info rows */}
+            <div className="space-y-2.5 text-sm">
+              <div className="flex items-center gap-3">
+                <span className="text-gray-500 w-20 flex-shrink-0">부여 날짜</span>
+                <span className="text-gray-200">{detailAssignment.assigned_date}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-gray-500 w-20 flex-shrink-0">마감 기한</span>
+                <span className="text-gray-200">{detailAssignment.due_date}</span>
+                {detailAssignment.status !== 'done' && (() => {
+                  const info = getDueDateInfo(detailAssignment.due_date)
+                  return <span className={`text-xs font-medium ${info.color}`}>{info.label}</span>
+                })()}
+              </div>
+              {detailAssignment.description && (
+                <div>
+                  <span className="text-gray-500 text-xs block mb-1">설명</span>
+                  <p className="text-gray-300 text-sm whitespace-pre-wrap bg-gray-750 rounded-lg p-3 border border-gray-700">{detailAssignment.description}</p>
+                </div>
+              )}
+              {detailAssignment.file_url && detailAssignment.file_name && (
+                <div>
+                  <span className="text-gray-500 text-xs block mb-1">첨부 파일</span>
+                  <button
+                    onClick={() => handleDownload(detailAssignment.file_url!, detailAssignment.file_name!)}
+                    className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-blue-400 rounded-lg text-sm transition border border-gray-600"
+                  >
+                    <Download className="w-4 h-4" />
+                    {detailAssignment.file_name}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            {canManage && (
+              <div className="flex items-center gap-2 pt-2 border-t border-gray-700">
+                <button
+                  onClick={() => { handleStartEdit(detailAssignment); setDetailAssignment(null) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> 수정
+                </button>
+                <button
+                  onClick={() => { handleDelete(detailAssignment.id); setDetailAssignment(null) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm transition border border-red-800"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> 삭제
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
