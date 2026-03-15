@@ -173,6 +173,8 @@ export interface Message {
   content: string
   is_read: boolean
   reply_to_id: string | null
+  image_url?: string
+  image_name?: string
   created_at: string
 }
 

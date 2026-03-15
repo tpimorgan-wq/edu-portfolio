@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. body 파싱
-  const { receiver_id, content, reply_to_id } = await req.json()
+  const { receiver_id, content, reply_to_id, image_url, image_name } = await req.json()
 
   if (!receiver_id || !content?.trim()) {
     return NextResponse.json({ error: '수신자와 내용은 필수입니다.' }, { status: 400 })
@@ -37,14 +37,19 @@ export async function POST(req: NextRequest) {
     const receiverEmail = receiverDoc.data()?.email
 
     // 4. Firestore에 메시지 저장
-    const msgRef = await db.collection('messages').add({
+    const messageData: Record<string, any> = {
       sender_id: senderId,
       receiver_id,
       content: content.trim(),
       is_read: false,
       reply_to_id: reply_to_id || null,
       created_at: new Date().toISOString(),
-    })
+    }
+    if (image_url) {
+      messageData.image_url = image_url
+      messageData.image_name = image_name || null
+    }
+    const msgRef = await db.collection('messages').add(messageData)
 
     // 5. 이메일 발송 (best-effort)
     if (receiverEmail) {

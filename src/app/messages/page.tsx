@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/firebase/db'
 import { getSessionFromCookies } from '@/lib/firebase/auth'
@@ -11,9 +11,17 @@ import {
   ArrowLeft,
   Plus,
   X,
+  Paperclip,
+  Image as ImageIcon,
 } from 'lucide-react'
 
 type Tab = 'inbox' | 'sent'
+
+interface ImageAttachment {
+  url: string
+  name: string
+  preview: string
+}
 
 export default function MessagesPage() {
   const router = useRouter()
@@ -29,6 +37,13 @@ export default function MessagesPage() {
   const [replyContent, setReplyContent] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [sendMode, setSendMode] = useState<'individual' | 'broadcast'>('individual')
+  const [composeImage, setComposeImage] = useState<ImageAttachment | null>(null)
+  const [replyImage, setReplyImage] = useState<ImageAttachment | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const composeFileRef = useRef<HTMLInputElement>(null)
+  const replyFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -94,38 +109,70 @@ export default function MessagesPage() {
 
   const fetchAllowedRecipients = async (db: ReturnType<typeof createClient>, prof: Profile, userId: string) => {
     try {
-      if (prof.role === 'admin' || prof.role === 'consultant') {
+      const recipientIds = new Set<string>()
+
+      if (prof.role === 'admin') {
+        // Admin: all users
         const roles = ['admin', 'consultant', 'parent', 'student'] as const
         const results = await Promise.all(
           roles.map(role => db.from('profiles').select('*').eq('role', role))
         )
         const allProfiles = results.flatMap(r => (r.data || []) as Profile[])
         setAllowedRecipients(allProfiles.filter((p: Profile) => p.id !== userId))
-      } else {
-        // parent or student: only consultants linked via students
-        const { data: students } = await db
-          .from('students')
-          .select('main_consultant_id, consultant_ids')
-          .eq('parent_id', userId)
+        return
+      }
 
-        const consultantIds = new Set<string>()
+      // Fetch all admins (available to all roles)
+      const { data: admins } = await db.from('profiles').select('*').eq('role', 'admin')
+      if (admins) {
+        for (const a of admins) recipientIds.add(a.id)
+      }
+
+      if (prof.role === 'student') {
+        // Student: consultants from own student record + admins
+        const { data: students } = await db.from('students').select('*').eq('user_id', userId)
         if (students) {
           for (const s of students) {
-            if (s.main_consultant_id) consultantIds.add(s.main_consultant_id)
+            if (s.main_consultant_id) recipientIds.add(s.main_consultant_id)
             if (s.consultant_ids) {
-              for (const cid of s.consultant_ids) consultantIds.add(cid)
+              for (const cid of s.consultant_ids) recipientIds.add(cid)
             }
           }
         }
-
-        if (consultantIds.size > 0) {
-          const results = await Promise.all(
-            Array.from(consultantIds).map(cid =>
-              db.from('profiles').select('*').eq('id', cid).single()
-            )
-          )
-          setAllowedRecipients(results.map(r => r.data).filter(Boolean) as Profile[])
+      } else if (prof.role === 'parent') {
+        // Parent: consultants from children's student records + admins
+        const { data: students } = await db.from('students').select('*').eq('parent_id', userId)
+        if (students) {
+          for (const s of students) {
+            if (s.main_consultant_id) recipientIds.add(s.main_consultant_id)
+            if (s.consultant_ids) {
+              for (const cid of s.consultant_ids) recipientIds.add(cid)
+            }
+          }
         }
+      } else if (prof.role === 'consultant') {
+        // Consultant: students + parents linked to assigned students + admins
+        const { data: allStudents } = await db.from('students').select('*')
+        if (allStudents) {
+          for (const s of allStudents) {
+            const cids: string[] = s.consultant_ids || []
+            if (cids.includes(userId) || s.main_consultant_id === userId) {
+              if (s.user_id) recipientIds.add(s.user_id)
+              if (s.parent_id) recipientIds.add(s.parent_id)
+            }
+          }
+        }
+      }
+
+      recipientIds.delete(userId)
+
+      if (recipientIds.size > 0) {
+        const results = await Promise.all(
+          Array.from(recipientIds).map(rid =>
+            db.from('profiles').select('*').eq('id', rid).single()
+          )
+        )
+        setAllowedRecipients(results.map(r => r.data).filter(Boolean) as Profile[])
       }
     } catch (err) {
       console.error('Failed to fetch allowed recipients:', err)
@@ -155,9 +202,42 @@ export default function MessagesPage() {
     }
   }
 
+  const handleImageUpload = async (
+    file: File,
+    setImage: (img: ImageAttachment | null) => void,
+  ) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      alert('JPG, PNG, GIF, WebP 이미지만 첨부할 수 있습니다.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('파일 크기는 5MB 이하여야 합니다.')
+      return
+    }
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/messages/upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || '업로드 실패')
+      }
+      const { url, name } = await res.json()
+      setImage({ url, name, preview: URL.createObjectURL(file) })
+    } catch (err: any) {
+      alert(err.message || '이미지 업로드에 실패했습니다.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleSelectMessage = async (msg: Message) => {
     setSelectedMessage(msg)
     setReplyContent('')
+    setReplyImage(null)
 
     // Mark as read if inbox message
     if (profile && msg.receiver_id === profile.id && !msg.is_read) {
@@ -172,7 +252,7 @@ export default function MessagesPage() {
   }
 
   const handleReply = async () => {
-    if (!selectedMessage || !replyContent.trim() || !profile) return
+    if (!selectedMessage || (!replyContent.trim() && !replyImage) || !profile) return
     setSending(true)
     try {
       const res = await fetch('/api/messages/send', {
@@ -180,12 +260,15 @@ export default function MessagesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           receiver_id: selectedMessage.sender_id,
-          content: replyContent.trim(),
+          content: replyContent.trim() || (replyImage ? '(이미지)' : ''),
           reply_to_id: selectedMessage.id,
+          image_url: replyImage?.url || undefined,
+          image_name: replyImage?.name || undefined,
         }),
       })
       if (!res.ok) throw new Error('Failed to send reply')
       setReplyContent('')
+      setReplyImage(null)
       // Refresh messages
       const db = createClient()
       const { data: inbox } = await db
@@ -209,34 +292,80 @@ export default function MessagesPage() {
   }
 
   const handleCompose = async () => {
-    if (!composeForm.receiver_id || !composeForm.content.trim() || !profile) return
-    setSending(true)
-    try {
-      const res = await fetch('/api/messages/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          receiver_id: composeForm.receiver_id,
-          content: composeForm.content.trim(),
-          reply_to_id: null,
-        }),
-      })
-      if (!res.ok) throw new Error('Failed to send message')
-      setComposeForm({ receiver_id: '', content: '' })
-      setShowCompose(false)
-      // Refresh sent
-      const db = createClient()
-      const { data: sent } = await db
-        .from('messages')
-        .select('*')
-        .eq('sender_id', profile.id)
-        .order('created_at', { ascending: false })
-      setSentMessages(sent || [])
-      await refreshProfileMap(messages, sent || [])
-    } catch (err) {
-      console.error('Failed to send message:', err)
-    } finally {
-      setSending(false)
+    if ((!composeForm.content.trim() && !composeImage) || !profile) return
+
+    const content = composeForm.content.trim() || (composeImage ? '(이미지)' : '')
+
+    if (sendMode === 'broadcast') {
+      // Broadcast: send to all allowed recipients
+      if (allowedRecipients.length === 0) return
+      setSending(true)
+      try {
+        await Promise.all(
+          allowedRecipients.map(r =>
+            fetch('/api/messages/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                receiver_id: r.id,
+                content,
+                reply_to_id: null,
+                image_url: composeImage?.url || undefined,
+                image_name: composeImage?.name || undefined,
+              }),
+            })
+          )
+        )
+        setComposeForm({ receiver_id: '', content: '' })
+        setComposeImage(null)
+        setSendMode('individual')
+        setShowCompose(false)
+        const db = createClient()
+        const { data: sent } = await db
+          .from('messages')
+          .select('*')
+          .eq('sender_id', profile.id)
+          .order('created_at', { ascending: false })
+        setSentMessages(sent || [])
+        await refreshProfileMap(messages, sent || [])
+      } catch (err) {
+        console.error('Failed to broadcast message:', err)
+      } finally {
+        setSending(false)
+      }
+    } else {
+      // Individual
+      if (!composeForm.receiver_id) return
+      setSending(true)
+      try {
+        const res = await fetch('/api/messages/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            receiver_id: composeForm.receiver_id,
+            content,
+            reply_to_id: null,
+            image_url: composeImage?.url || undefined,
+            image_name: composeImage?.name || undefined,
+          }),
+        })
+        if (!res.ok) throw new Error('Failed to send message')
+        setComposeForm({ receiver_id: '', content: '' })
+        setComposeImage(null)
+        setShowCompose(false)
+        const db = createClient()
+        const { data: sent } = await db
+          .from('messages')
+          .select('*')
+          .eq('sender_id', profile.id)
+          .order('created_at', { ascending: false })
+        setSentMessages(sent || [])
+        await refreshProfileMap(messages, sent || [])
+      } catch (err) {
+        console.error('Failed to send message:', err)
+      } finally {
+        setSending(false)
+      }
     }
   }
 
@@ -346,7 +475,10 @@ export default function MessagesPage() {
                     <span className={`text-sm ${tab === 'inbox' && !msg.is_read ? 'font-bold text-white' : 'text-gray-300'}`}>
                       {getDisplayName(msg)}
                     </span>
-                    <span className="text-[11px] text-gray-500">{formatDate(msg.created_at)}</span>
+                    <div className="flex items-center gap-1">
+                      {msg.image_url && <ImageIcon className="w-3 h-3 text-gray-500" />}
+                      <span className="text-[11px] text-gray-500">{formatDate(msg.created_at)}</span>
+                    </div>
                   </div>
                   <p className="text-xs text-gray-400 truncate">{msg.content}</p>
                 </button>
@@ -386,12 +518,66 @@ export default function MessagesPage() {
                 <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">
                   {selectedMessage.content}
                 </p>
+                {selectedMessage.image_url && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => setLightboxUrl(selectedMessage.image_url!)}
+                      className="group relative inline-block"
+                    >
+                      <img
+                        src={selectedMessage.image_url}
+                        alt={selectedMessage.image_name || '첨부 이미지'}
+                        className="max-w-xs max-h-60 rounded-xl border border-gray-600 object-cover cursor-pointer group-hover:brightness-90 transition"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                        <span className="bg-black/60 text-white text-xs px-2 py-1 rounded-lg">클릭하여 원본 보기</span>
+                      </div>
+                    </button>
+                    {selectedMessage.image_name && (
+                      <p className="text-[11px] text-gray-500 mt-1">{selectedMessage.image_name}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Reply (inbox only) */}
               {tab === 'inbox' && (
                 <div className="px-5 py-4 border-t border-gray-700">
+                  {replyImage && (
+                    <div className="mb-2 relative inline-block">
+                      <img
+                        src={replyImage.preview}
+                        alt={replyImage.name}
+                        className="h-20 rounded-lg border border-gray-600 object-cover"
+                      />
+                      <button
+                        onClick={() => setReplyImage(null)}
+                        className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex gap-2">
+                    <input
+                      ref={replyFileRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (file) handleImageUpload(file, setReplyImage)
+                        e.target.value = ''
+                      }}
+                    />
+                    <button
+                      onClick={() => replyFileRef.current?.click()}
+                      disabled={uploading}
+                      className="self-end text-gray-400 hover:text-blue-400 disabled:opacity-50 p-2.5 transition"
+                      title="이미지 첨부"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
                     <textarea
                       value={replyContent}
                       onChange={e => setReplyContent(e.target.value)}
@@ -401,7 +587,7 @@ export default function MessagesPage() {
                     />
                     <button
                       onClick={handleReply}
-                      disabled={!replyContent.trim() || sending}
+                      disabled={(!replyContent.trim() && !replyImage) || sending || uploading}
                       className="self-end bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-xl transition"
                     >
                       <Send className="w-4 h-4" />
@@ -426,7 +612,7 @@ export default function MessagesPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
               <h2 className="text-lg font-bold text-white">새 메시지</h2>
               <button
-                onClick={() => { setShowCompose(false); setComposeForm({ receiver_id: '', content: '' }) }}
+                onClick={() => { setShowCompose(false); setComposeForm({ receiver_id: '', content: '' }); setComposeImage(null) }}
                 className="text-gray-400 hover:text-white transition"
               >
                 <X className="w-5 h-5" />
@@ -470,17 +656,56 @@ export default function MessagesPage() {
                   className="w-full bg-gray-900 border border-gray-600 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
                 />
               </div>
+              {/* Image Attachment */}
+              <div>
+                <input
+                  ref={composeFileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (file) handleImageUpload(file, setComposeImage)
+                    e.target.value = ''
+                  }}
+                />
+                {composeImage ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={composeImage.preview}
+                      alt={composeImage.name}
+                      className="h-24 rounded-xl border border-gray-600 object-cover"
+                    />
+                    <button
+                      onClick={() => setComposeImage(null)}
+                      className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                    <p className="text-[11px] text-gray-500 mt-1">{composeImage.name}</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => composeFileRef.current?.click()}
+                    disabled={uploading}
+                    className="flex items-center gap-2 text-sm text-gray-400 hover:text-blue-400 disabled:opacity-50 transition"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                    {uploading ? '업로드 중...' : '이미지 첨부'}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-700">
               <button
-                onClick={() => { setShowCompose(false); setComposeForm({ receiver_id: '', content: '' }) }}
+                onClick={() => { setShowCompose(false); setComposeForm({ receiver_id: '', content: '' }); setComposeImage(null) }}
                 className="px-4 py-2 text-sm text-gray-400 hover:text-white transition"
               >
                 취소
               </button>
               <button
                 onClick={handleCompose}
-                disabled={!composeForm.receiver_id || !composeForm.content.trim() || sending}
+                disabled={!composeForm.receiver_id || (!composeForm.content.trim() && !composeImage) || sending || uploading}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl text-sm font-medium transition"
               >
                 <Send className="w-4 h-4" />
@@ -488,6 +713,27 @@ export default function MessagesPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white transition"
+          >
+            <X className="w-8 h-8" />
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="원본 이미지"
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={e => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
