@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { user_ids, title, body, data } = await req.json()
+  const { user_ids, title, body, data, type } = await req.json()
 
   if (!user_ids?.length || !title) {
     return NextResponse.json({ error: 'user_ids와 title은 필수입니다.' }, { status: 400 })
@@ -27,6 +27,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const db = getAdminDb()
+    const now = new Date().toISOString()
+
+    // Store notification records in Firestore for each user
+    const batch = db.batch()
+    for (const uid of user_ids) {
+      const ref = db.collection('push_notifications').doc()
+      batch.set(ref, {
+        user_id: uid,
+        title,
+        body: body || '',
+        type: type || 'general',
+        read: false,
+        created_at: now,
+      })
+    }
+    await batch.commit()
 
     // Fetch FCM tokens from profiles
     const tokens: string[] = []

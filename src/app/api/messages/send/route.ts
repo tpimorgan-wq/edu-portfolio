@@ -80,15 +80,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. FCM 푸시 발송 (best-effort)
+    // 6. FCM 푸시 발송 + Firestore 알림 저장 (best-effort)
+    const preview = content.length > 80 ? content.slice(0, 80) + '...' : content
+    const notifTitle = `${senderName}님의 새 메시지`
+
+    // Firestore 알림 저장
+    try {
+      await db.collection('push_notifications').add({
+        user_id: receiver_id,
+        title: notifTitle,
+        body: preview,
+        type: 'message',
+        read: false,
+        created_at: new Date().toISOString(),
+      })
+    } catch (e) {
+      console.error('Notification save failed:', e)
+    }
+
+    // FCM 푸시
     const receiverFcmToken = receiverDoc.data()?.fcm_token
     if (receiverFcmToken) {
       try {
-        const preview = content.length > 80 ? content.slice(0, 80) + '...' : content
         await getMessaging().send({
           token: receiverFcmToken,
           notification: {
-            title: `${senderName}님의 새 메시지`,
+            title: notifTitle,
             body: preview,
           },
           webpush: { fcmOptions: { link: '/messages' } },
