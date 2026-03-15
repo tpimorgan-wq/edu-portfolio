@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/firebase/db'
 import { Schedule, Assignment } from '@/types'
+import { sendPushNotification } from '@/lib/firebase/sendPush'
 import {
   Plus, Trash2, Save, X, Calendar, CheckCircle, Clock, XCircle,
   ChevronLeft, ChevronRight, Video, Paperclip, Download, Upload, Edit2,
@@ -176,6 +177,18 @@ export default function SchedulesTab({ studentId, userRole }: SchedulesTabProps)
     setShowForm(false)
     fetchSchedules()
     setSaving(false)
+
+    // Push notification to student/parent (best-effort)
+    try {
+      const db2 = createClient()
+      const { data: student } = await db2.from('students').select('*').eq('id', studentId).single()
+      if (student) {
+        const targetIds = [student.user_id, student.parent_id].filter(Boolean)
+        if (targetIds.length) {
+          sendPushNotification(targetIds, '새 일정이 등록되었습니다', `"${form.title}" - ${form.event_date}`)
+        }
+      }
+    } catch { /* ignore */ }
   }
 
   const handleStatusChange = async (id: string, status: Schedule['status']) => {

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import FcmInitializer from '@/components/FcmInitializer'
 
 export const metadata: Metadata = {
   title: '산타크로체 에듀펌',
@@ -23,6 +24,7 @@ export default function RootLayout({
       </head>
       <body className="bg-gray-900 text-gray-100 min-h-screen antialiased">
         {children}
+        <FcmInitializer />
       </body>
     </html>
   )

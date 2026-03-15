@@ -6,6 +6,7 @@ export interface Profile {
   full_name: string | null
   role: UserRole
   phone: string | null
+  fcm_token?: string
   created_at: string
   updated_at: string
 }

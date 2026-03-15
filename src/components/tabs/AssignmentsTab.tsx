@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/firebase/db'
 import { Assignment, UserRole } from '@/types'
 import { recordTabUpdate } from '@/lib/tab-update'
+import { sendPushNotification } from '@/lib/firebase/sendPush'
 import TabUpdateBanner from '@/components/TabUpdateBanner'
 import { Plus, Trash2, Save, X, ClipboardList, Edit2, Paperclip, Download, Upload } from 'lucide-react'
 
@@ -136,6 +137,18 @@ export default function AssignmentsTab({ studentId, userRole, userId, userName }
     fetchAssignments()
     setSaving(false)
     if (userId && userName && userRole) recordTabUpdate(studentId, 'assignments', userId, userName, userRole)
+
+    // Push notification to student/parent (best-effort)
+    try {
+      const db2 = createClient()
+      const { data: student } = await db2.from('students').select('*').eq('id', studentId).single()
+      if (student) {
+        const targetIds = [student.user_id, student.parent_id].filter(Boolean)
+        if (targetIds.length) {
+          sendPushNotification(targetIds, '새 과제가 부여되었습니다', `"${form.title}" 마감: ${form.due_date}`)
+        }
+      }
+    } catch { /* ignore */ }
   }
 
   const handleStartEdit = (a: Assignment) => {

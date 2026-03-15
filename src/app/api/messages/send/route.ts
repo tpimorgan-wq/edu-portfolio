@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminAuth, getAdminDb } from '@/lib/firebase/admin'
+import { getMessaging } from 'firebase-admin/messaging'
 import { Resend } from 'resend'
 
 export async function POST(req: NextRequest) {
@@ -71,6 +72,24 @@ export async function POST(req: NextRequest) {
         })
       } catch (e) {
         console.error('Email send failed:', e)
+      }
+    }
+
+    // 6. FCM 푸시 발송 (best-effort)
+    const receiverFcmToken = receiverDoc.data()?.fcm_token
+    if (receiverFcmToken) {
+      try {
+        const preview = content.length > 80 ? content.slice(0, 80) + '...' : content
+        await getMessaging().send({
+          token: receiverFcmToken,
+          notification: {
+            title: `${senderName}님의 새 메시지`,
+            body: preview,
+          },
+          webpush: { fcmOptions: { link: '/messages' } },
+        })
+      } catch (e) {
+        console.error('FCM push failed:', e)
       }
     }
 
