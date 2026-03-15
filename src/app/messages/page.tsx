@@ -124,21 +124,27 @@ export default function MessagesPage() {
 
       // Fetch all admins (available to all roles)
       const { data: admins } = await db.from('profiles').select('*').eq('role', 'admin')
-      if (admins) {
+      console.log('[Recipients] admins:', admins)
+      if (admins && Array.isArray(admins)) {
         for (const a of admins) recipientIds.add(a.id)
       }
+      console.log('[Recipients] recipientIds after admins:', Array.from(recipientIds))
 
       if (prof.role === 'student') {
         // Student: consultants from own student record + admins
+        console.log('[Recipients] Student user_id:', userId)
         const { data: students } = await db.from('students').select('*').eq('user_id', userId)
-        if (students) {
+        console.log('[Recipients] students query result:', students)
+        if (students && Array.isArray(students)) {
           for (const s of students) {
+            console.log('[Recipients] student doc:', { id: s.id, user_id: s.user_id, main_consultant_id: s.main_consultant_id, consultant_ids: s.consultant_ids })
             if (s.main_consultant_id) recipientIds.add(s.main_consultant_id)
-            if (s.consultant_ids) {
+            if (s.consultant_ids && Array.isArray(s.consultant_ids)) {
               for (const cid of s.consultant_ids) recipientIds.add(cid)
             }
           }
         }
+        console.log('[Recipients] recipientIds after student lookup:', Array.from(recipientIds))
       } else if (prof.role === 'parent') {
         // Parent: consultants from children's student records + admins
         const { data: students } = await db.from('students').select('*').eq('parent_id', userId)
@@ -165,6 +171,7 @@ export default function MessagesPage() {
       }
 
       recipientIds.delete(userId)
+      console.log('[Recipients] final recipientIds:', Array.from(recipientIds))
 
       if (recipientIds.size > 0) {
         const results = await Promise.all(
@@ -172,7 +179,11 @@ export default function MessagesPage() {
             db.from('profiles').select('*').eq('id', rid).single()
           )
         )
-        setAllowedRecipients(results.map(r => r.data).filter(Boolean) as Profile[])
+        const resolved = results.map(r => r.data).filter(Boolean) as Profile[]
+        console.log('[Recipients] resolved profiles:', resolved.map(p => ({ id: p.id, name: p.full_name, role: p.role })))
+        setAllowedRecipients(resolved)
+      } else {
+        console.log('[Recipients] no recipient IDs found — list will be empty')
       }
     } catch (err) {
       console.error('Failed to fetch allowed recipients:', err)
