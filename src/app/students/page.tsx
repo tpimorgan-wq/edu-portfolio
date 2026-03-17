@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/firebase/db'
 import { getSessionFromCookies } from '@/lib/firebase/auth'
 import { Profile, Student } from '@/types'
-import { Plus, Search, GraduationCap, ChevronRight, Filter } from 'lucide-react'
+import { Plus, Search, GraduationCap, Filter } from 'lucide-react'
 
 export default function StudentsPage() {
   const router = useRouter()
@@ -52,7 +52,6 @@ export default function StudentsPage() {
         const { data } = await query
         let studentList = (data || []) as Student[]
 
-        // Consultant: filter to students where they are main or in consultant_ids
         if (prof.role === 'consultant') {
           studentList = studentList.filter(s =>
             s.main_consultant_id === session.userId || (s.consultant_ids && s.consultant_ids.includes(session.userId))
@@ -62,7 +61,6 @@ export default function StudentsPage() {
         setStudents(studentList)
         setFiltered(studentList)
 
-        // Build consultant name map for display
         const { data: allConsultants } = await db.from('profiles').select('id, full_name, email').eq('role', 'consultant')
         const nameMap: Record<string, string> = {}
         for (const c of (allConsultants || [])) nameMap[c.id] = (c as any).full_name || (c as any).email
@@ -161,7 +159,7 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* Student Grid */}
+      {/* Student Table */}
       {filtered.length === 0 ? (
         <div className="bg-gray-800 rounded-2xl border border-gray-700 p-16 text-center">
           <GraduationCap className="w-12 h-12 text-gray-600 mx-auto mb-4" />
@@ -171,57 +169,71 @@ export default function StudentsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((student) => (
-            <Link
-              key={student.id}
-              href={`/students/${student.id}`}
-              className="bg-gray-800 rounded-2xl border border-gray-700 p-5 hover:border-blue-600 hover:bg-gray-750 transition-all duration-150 group"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-gray-700 flex items-center justify-center text-lg font-bold text-gray-200">
-                    {student.name[0]}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-white group-hover:text-blue-400 transition">
-                      {student.name}
-                      {student.nationality && <span className="text-xs text-gray-500 ml-1">({student.nationality})</span>}
-                    </div>
-                    <div className="text-xs text-gray-400">{student.school || '학교 미정'}</div>
-                  </div>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${statusColors[student.status]}`}>
-                  {statusLabels[student.status]}
-                </span>
-              </div>
-
-              <div className="space-y-1.5 text-xs text-gray-400">
-                <div className="flex justify-between">
-                  <span>학년</span>
-                  <span className="text-gray-300">{student.grade || '-'}</span>
-                </div>
-                {student.target_countries && student.target_countries.length > 0 && (
-                  <div className="flex justify-between">
-                    <span>목표 국가</span>
-                    <span className="text-gray-300 truncate max-w-32 text-right">
-                      {student.target_countries.join(', ')}
-                    </span>
-                  </div>
-                )}
-                {student.main_consultant_id && consultantNames[student.main_consultant_id] && (
-                  <div className="flex justify-between">
-                    <span>메인 담당자</span>
-                    <span className="text-gray-300 truncate max-w-32 text-right">{consultantNames[student.main_consultant_id]}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-4 flex items-center justify-end text-blue-400 text-xs font-medium opacity-0 group-hover:opacity-100 transition">
-                자세히 보기 <ChevronRight className="w-3 h-3 ml-0.5" />
-              </div>
-            </Link>
-          ))}
+        <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead>
+                <tr className="border-b border-gray-700 text-xs text-gray-400 uppercase tracking-wider">
+                  <th className="text-left px-5 py-3 font-medium">이름</th>
+                  <th className="text-left px-5 py-3 font-medium">학교</th>
+                  <th className="text-left px-5 py-3 font-medium">학년</th>
+                  <th className="text-left px-5 py-3 font-medium">지원국가</th>
+                  <th className="text-left px-5 py-3 font-medium">메인담당자</th>
+                  <th className="text-left px-5 py-3 font-medium">상태</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700/50">
+                {filtered.map(student => (
+                  <tr
+                    key={student.id}
+                    onClick={() => router.push(`/students/${student.id}`)}
+                    className="hover:bg-gray-700/40 cursor-pointer transition"
+                  >
+                    {/* 이름 */}
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-200 flex-shrink-0">
+                          {student.name[0]}
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-white">{student.name}</span>
+                          {student.nationality && (
+                            <span className="ml-1.5 text-[10px] bg-gray-700 text-gray-400 px-1.5 py-0.5 rounded">
+                              {student.nationality}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    {/* 학교 */}
+                    <td className="px-5 py-3.5 text-sm text-gray-300 max-w-[200px] truncate">
+                      {student.school || '-'}
+                    </td>
+                    {/* 학년 */}
+                    <td className="px-5 py-3.5 text-sm text-gray-300">
+                      {student.grade || '-'}
+                    </td>
+                    {/* 지원국가 */}
+                    <td className="px-5 py-3.5 text-sm text-gray-300">
+                      {student.target_countries?.join(', ') || '-'}
+                    </td>
+                    {/* 메인담당자 */}
+                    <td className="px-5 py-3.5 text-sm text-gray-300">
+                      {student.main_consultant_id && consultantNames[student.main_consultant_id]
+                        ? consultantNames[student.main_consultant_id]
+                        : '-'}
+                    </td>
+                    {/* 상태 */}
+                    <td className="px-5 py-3.5">
+                      <span className={`text-xs px-2 py-1 rounded-full ${statusColors[student.status]}`}>
+                        {statusLabels[student.status]}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
