@@ -14,6 +14,7 @@ import {
   Bell,
   MessageSquare,
   Calendar,
+  Target,
 } from 'lucide-react'
 import { UserRole, Notification, Schedule } from '@/types'
 import { createClient } from '@/lib/firebase/db'
@@ -52,6 +53,18 @@ const navItems: NavItem[] = [
     label: '학생 목록',
     href: '/students',
     icon: <Users className="w-5 h-5" />,
+    roles: ['admin', 'consultant'],
+  },
+  {
+    label: '업무 관리',
+    href: '/tasks',
+    icon: <ClipboardList className="w-5 h-5" />,
+    roles: ['admin', 'consultant'],
+  },
+  {
+    label: '신규 파이프라인',
+    href: '/pipeline',
+    icon: <Target className="w-5 h-5" />,
     roles: ['admin', 'consultant'],
   },
   {
