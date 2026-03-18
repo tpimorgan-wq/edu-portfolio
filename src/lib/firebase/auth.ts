@@ -75,3 +75,31 @@ export function getSessionFromCookies(): {
     email: payload.email || '',
   }
 }
+
+// ── Token refresh: renew if expiring within 1 hour ─────────
+export async function refreshTokenIfNeeded(): Promise<boolean> {
+  const token = getTokenFromCookie()
+  if (!token) return false
+
+  const payload = decodeJwt(token)
+  if (!payload?.exp) return false
+
+  const expiresAt = payload.exp * 1000
+  const oneHour = 60 * 60 * 1000
+  const now = Date.now()
+
+  // Still valid for more than 1 hour — no refresh needed
+  if (expiresAt - now > oneHour) return false
+
+  try {
+    const auth = getClientAuth()
+    const user = auth.currentUser
+    if (!user) return false
+
+    const freshToken = await user.getIdToken(true)
+    setSessionCookies(freshToken)
+    return true
+  } catch {
+    return false
+  }
+}

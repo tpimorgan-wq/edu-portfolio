@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/layout/Sidebar'
 import Header from '@/components/layout/Header'
 import { createClient } from '@/lib/firebase/db'
-import { getSessionFromCookies } from '@/lib/firebase/auth'
+import { getSessionFromCookies, refreshTokenIfNeeded } from '@/lib/firebase/auth'
 import { Profile } from '@/types'
 
 export default function AuthenticatedLayout({
@@ -19,14 +19,20 @@ export default function AuthenticatedLayout({
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const init = async () => {
       try {
+        // 1. Refresh token first if it's about to expire
+        await refreshTokenIfNeeded()
+
+        // 2. Check session after refresh
         const session = getSessionFromCookies()
         if (!session) {
+          setLoading(false)
           router.push('/login')
           return
         }
 
+        // 3. Fetch profile from Firestore
         const db = createClient()
         const { data: profileData } = await db
           .from('profiles')
@@ -35,6 +41,7 @@ export default function AuthenticatedLayout({
           .single()
 
         if (!profileData) {
+          setLoading(false)
           router.push('/login')
           return
         }
@@ -42,17 +49,52 @@ export default function AuthenticatedLayout({
         setProfile(profileData)
       } catch (err: any) {
         console.error('Failed to fetch profile:', err)
+
+        // Permission denied — try refreshing token once more
         if (err?.code === 'permission-denied') {
+          try {
+            const refreshed = await refreshTokenIfNeeded()
+            if (refreshed) {
+              // Retry fetch with fresh token
+              const session = getSessionFromCookies()
+              if (session) {
+                const db = createClient()
+                const { data: retryData } = await db
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', session.userId)
+                  .single()
+                if (retryData) {
+                  setProfile(retryData)
+                  setLoading(false)
+                  return
+                }
+              }
+            }
+          } catch {
+            // Retry also failed
+          }
           document.cookie = 'fb-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
         }
+
+        setLoading(false)
         router.push('/login')
+        return
       } finally {
         setLoading(false)
       }
     }
 
-    fetchProfile()
+    init()
   }, [router])
+
+  // Periodic token refresh (every 5 minutes)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshTokenIfNeeded()
+    }, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   if (loading) {
     return (
