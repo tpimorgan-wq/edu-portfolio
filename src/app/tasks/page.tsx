@@ -88,11 +88,40 @@ export default function TasksPage() {
     if (!form.title.trim() || !profile) return
     const db = createClient()
     const now = new Date().toISOString()
+    const isNew = !modal
     if (modal) {
       await db.from('tasks').update({ ...form, updated_at: now }).eq('id', modal.id)
     } else {
       await db.from('tasks').insert({ ...form, proposer_id: form.proposer_id || profile.id, created_at: now, updated_at: now }).select('*').single()
     }
+
+    // Background: send FCM + message to each owner
+    const owners = form.owner_ids || []
+    if (owners.length > 0) {
+      const notifTitle = isNew ? '새 업무가 배정되었습니다' : '업무가 업데이트되었습니다'
+      const notifBody = isNew
+        ? `${form.title}${form.due_date ? ' (마감: ' + form.due_date + ')' : ''}`
+        : form.title
+      const msgContent = isNew
+        ? `새 업무가 배정되었습니다: ${form.title}${form.due_date ? ' (마감: ' + form.due_date + ')' : ''}`
+        : `업무가 업데이트되었습니다: ${form.title}`
+
+      Promise.all([
+        fetch('/api/notifications/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_ids: owners, title: notifTitle, body: notifBody, type: 'task' }),
+        }),
+        ...owners.map(ownerId =>
+          fetch('/api/messages/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ receiver_id: ownerId, content: msgContent, reply_to_id: null }),
+          })
+        ),
+      ]).catch(() => {})
+    }
+
     setModal(null)
     setShowNew(false)
     setForm(emptyTask)
