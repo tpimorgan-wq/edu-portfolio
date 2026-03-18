@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { signInWithPassword, setSessionCookies } from '@/lib/firebase/auth'
@@ -11,13 +11,28 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('saved_email')
+    if (saved) {
+      setEmail(saved)
+      setRememberMe(true)
+    }
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
+    if (rememberMe) {
+      localStorage.setItem('saved_email', email)
+    } else {
+      localStorage.removeItem('saved_email')
+    }
 
     const { userId, token, error: signInError } = await signInWithPassword(email, password)
 
@@ -116,6 +131,17 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-300">아이디 저장</span>
+              <button
+                type="button"
+                onClick={() => setRememberMe(!rememberMe)}
+                className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${rememberMe ? 'bg-[#C8A96E]' : 'bg-gray-600'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${rememberMe ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
             </div>
 
             {error && (
