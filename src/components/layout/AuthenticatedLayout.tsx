@@ -40,8 +40,11 @@ export default function AuthenticatedLayout({
         }
 
         setProfile(profileData)
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to fetch profile:', err)
+        if (err?.code === 'permission-denied') {
+          document.cookie = 'fb-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+        }
         router.push('/login')
       } finally {
         setLoading(false)
